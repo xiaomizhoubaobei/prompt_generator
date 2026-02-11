@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_API_KEY: ${VITE_APP_API_KEY:-}
+        VITE_APP_SHOW_BRAND: ${VITE_APP_SHOW_BRAND:-false}
+        VITE_APP_MODEL_NAME: ${VITE_APP_MODEL_NAME:-gpt-4o}
+        VITE_APP_REGION: ${VITE_APP_REGION:-0}
+        VITE_APP_LOCALE: ${VITE_APP_LOCALE:-zh}
+        VITE_APP_API_URL: ${VITE_APP_API_URL:-https://api.302.ai}
+        VITE_APP_OFFICIAL_WEBSITE_URL_CHINA: ${VITE_APP_OFFICIAL_WEBSITE_URL_CHINA:-https://302ai.cn/}
+        VITE_APP_OFFICIAL_WEBSITE_URL_GLOBAL: ${VITE_APP_OFFICIAL_WEBSITE_URL_GLOBAL:-https://302.ai/}
+        VITE_APP_UPLOAD_API_URL: ${VITE_APP_UPLOAD_API_URL:-https://dash-api.302.ai/gpt/api/upload/gpt/image}
+    image: 302-prompt-generator:latest
+    container_name: 302-prompt-generator
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:80"
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - prompt-network
+
+networks:
+  prompt-network:
+    driver: bridge
