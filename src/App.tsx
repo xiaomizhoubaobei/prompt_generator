@@ -193,7 +193,7 @@ function App(): React.JSX.Element {
       max_tokens: 4096,
     };
 
-    const apiConfig = getApiConfig();
+    const apiConfig = await getApiConfig();
 
     return fetchApi(
       `${apiConfig.apiUrl}/v1/chat/completions`,
@@ -328,7 +328,7 @@ function App(): React.JSX.Element {
       max_tokens: 4096,
     };
 
-    const apiConfig = getApiConfig();
+    const apiConfig = await getApiConfig();
 
     return fetchApi(
       `${apiConfig.apiUrl}/v1/chat/completions`,
@@ -470,7 +470,7 @@ function App(): React.JSX.Element {
     setErrComp("");
     if (structureType !== "DRAW") {
       setIsTesting(true);
-      const apiConfig = getApiConfig();
+      const apiConfig = await getApiConfig();
       let url = `${apiConfig.apiUrl}/v1/chat/completions`;
       let body = {
         model: global.selectedModel || import.meta.env.VITE_APP_MODEL_NAME,
@@ -561,7 +561,7 @@ function App(): React.JSX.Element {
       })
     } else {
       setIsTesting(true);
-      const apiConfig = getApiConfig();
+      const apiConfig = await getApiConfig();
       let url = `${apiConfig.apiUrl}/302/submit/flux-dev`;
       const myHeaders = new Headers();
       myHeaders.append("Authorization", `Bearer ${apiConfig.apiKey}`);
@@ -622,7 +622,7 @@ function App(): React.JSX.Element {
       const imgUrl = imageResult.data.url;
       if (imgUrl) {
         const model = global.selectedModel || import.meta.env.VITE_APP_MODEL_NAME;
-        const apiConfig = getApiConfig();
+        const apiConfig = await getApiConfig();
         ky(`${apiConfig.apiUrl}/v1/chat/completions`,
           {
             method: 'post',

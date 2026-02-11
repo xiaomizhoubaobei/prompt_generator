@@ -23,6 +23,7 @@
 
 import { useState, useEffect } from "react"
 import { LANGUAGE_LIBRARY, commonModelList } from "../lib/Language"
+import { encrypt, decrypt } from "../lib/security"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
@@ -57,25 +58,30 @@ export function SettingsDialog() {
 
   useEffect(() => {
     // 从 localStorage 加载设置
-    const savedSettings = localStorage.getItem('appSettings')
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings)
-        setSettings({
-          apiKey: parsed.apiKey || import.meta.env.VITE_APP_API_KEY || '',
-          apiUrl: parsed.apiUrl || import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
-          modelName: parsed.modelName || import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-        })
-      } catch (e) {
-        console.error('Failed to parse settings:', e)
+    const loadSettings = async () => {
+      const savedSettings = localStorage.getItem('appSettings')
+      if (savedSettings) {
+        try {
+          const parsed = JSON.parse(savedSettings)
+          const decryptedApiKey = await decrypt(parsed.apiKey)
+          setSettings({
+            apiKey: decryptedApiKey || import.meta.env.VITE_APP_API_KEY || '',
+            apiUrl: parsed.apiUrl || import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
+            modelName: parsed.modelName || import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
+          })
+        } catch (e) {
+          console.error('Failed to parse settings:', e)
+        }
       }
     }
+    loadSettings()
   }, [])
 
-  const handleSave = () => {
-    // 保存设置到 localStorage
+  const handleSave = async () => {
+    // 保存设置到 localStorage（加密 API Key）
+    const encryptedApiKey = await encrypt(settings.apiKey)
     const settingsToSave = {
-      apiKey: settings.apiKey,
+      apiKey: encryptedApiKey,
       apiUrl: settings.apiUrl,
       modelName: settings.modelName
     }
@@ -87,14 +93,15 @@ export function SettingsDialog() {
     setIsOpen(false)
   }
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     // 恢复原始设置
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings)
+        const decryptedApiKey = await decrypt(parsed.apiKey)
         setSettings({
-          apiKey: parsed.apiKey || import.meta.env.VITE_APP_API_KEY || '',
+          apiKey: decryptedApiKey || import.meta.env.VITE_APP_API_KEY || '',
           apiUrl: parsed.apiUrl || import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
           modelName: parsed.modelName || import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
         })

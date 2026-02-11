@@ -24,6 +24,7 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import ky from 'ky'
 import { responseHandler, Language } from "./lib/ResponseHandler";
+import { decrypt } from "./lib/security";
 
 /**
  * 智能合并 CSS 类名
@@ -107,7 +108,7 @@ export async function fetchApi(
  *
  * @returns 包含 apiKey、apiUrl 和 modelName 的对象
  */
-export function getApiConfig() {
+export async function getApiConfig() {
   let apiKey = import.meta.env.VITE_APP_API_KEY || ''
   let apiUrl = import.meta.env.VITE_APP_API_URL || 'https://api.302.ai'
   let modelName = import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
@@ -116,7 +117,7 @@ export function getApiConfig() {
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
-      if (parsed.apiKey) apiKey = parsed.apiKey
+      if (parsed.apiKey) apiKey = await decrypt(parsed.apiKey)
       if (parsed.apiUrl) apiUrl = parsed.apiUrl
       if (parsed.modelName) modelName = parsed.modelName
     }
