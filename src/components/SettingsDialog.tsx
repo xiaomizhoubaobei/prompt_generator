@@ -10,7 +10,7 @@
  * - API Key
  * - API URL
  * - 模型名称
- * 
+ *
  * 支持的功能：
  * - 保存配置到 localStorage
  * - 加载配置从 localStorage
@@ -48,7 +48,7 @@ interface SettingsData {
 export function SettingsDialog() {
   const dispatch = useAppDispatch()
   const global = useAppSelector(selectGlobal)
-  
+
   const [isOpen, setIsOpen] = useState(false)
   const [settings, setSettings] = useState<SettingsData>({
     apiKey: import.meta.env.VITE_APP_API_KEY || '',
@@ -86,10 +86,10 @@ export function SettingsDialog() {
       modelName: settings.modelName
     }
     localStorage.setItem('appSettings', JSON.stringify(settingsToSave))
-    
+
     // 更新全局状态
     dispatch(setGlobalState({ selectedModel: settings.modelName }))
-    
+
     setIsOpen(false)
   }
 
@@ -124,7 +124,7 @@ export function SettingsDialog() {
             {LANGUAGE_LIBRARY[global.language]["配置 API Key 和模型"] || "配置您的 API Key 和选择使用的模型"}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="apiKey" className="text-right">
@@ -139,7 +139,7 @@ export function SettingsDialog() {
               onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
             />
           </div>
-          
+
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="apiUrl" className="text-right">
               API URL
@@ -152,7 +152,7 @@ export function SettingsDialog() {
               onChange={(e) => setSettings({ ...settings, apiUrl: e.target.value })}
             />
           </div>
-          
+
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="model" className="text-right mt-2">
               {LANGUAGE_LIBRARY[global.language]["AI模型"] || "AI 模型"}
@@ -174,7 +174,7 @@ export function SettingsDialog() {
             </div>
           </div>
         </div>
-        
+
         <DialogFooter>
           <Button variant="outline" onClick={handleCancel}>
             {LANGUAGE_LIBRARY[global.language]["取消"] || "取消"}

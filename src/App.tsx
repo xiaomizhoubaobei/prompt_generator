@@ -858,7 +858,7 @@ function App(): React.JSX.Element {
               {isDisabled ? LANGUAGE_LIBRARY[global.language]["正在生成，请耐心等待..."] : LANGUAGE_LIBRARY[global.language]["生成"]}
             </Button>
             <div className={
-              `flex items-center gap-2 
+              `flex items-center gap-2
               ${structureType === "DRAW" && onDisplayUpload() ? 'block' : 'hidden'}`
             }>
               <div>{LANGUAGE_LIBRARY[global.language]["或"]}</div>

@@ -44,7 +44,7 @@ Enter a simple description, and the AI will generate high-quality prompts. There
 
 Through AI Prompt Expert! - Transform your ideas into perfect AI instructions! 🎉💻 Let's explore the new world of AI-driven code together! 🌟🚀
 
-## 🚩 Future Update Plans 
+## 🚩 Future Update Plans
 - [ ] Industry Segmentation Prompt Optimization
 - [ ] Update Emerging Models
 - [ ] Add Conversion Functions for Languages such as French, German, Spanish
