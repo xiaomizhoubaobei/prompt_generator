@@ -29,10 +29,10 @@ import { decrypt } from "./lib/security";
 /**
  * 智能合并 CSS 类名
  * 使用 clsx 和 tailwind-merge 组合，处理 Tailwind CSS 的类名冲突
- * 
+ *
  * @param inputs - CSS 类名，可以是字符串、对象、数组等任意格式
  * @returns 合并后的 CSS 类名字符串
- * 
+ *
  * @example
  * cn('px-4', 'py-2', { 'bg-blue-500': isActive }) // 'px-4 py-2 bg-blue-500'
  * cn(['text-sm', 'font-bold']) // 'text-sm font-bold'
@@ -44,10 +44,10 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * 从 Markdown 格式的文本中提取代码块内容
  * 支持带语言标记和不带语言标记的代码块，使用正则表达式匹配
- * 
+ *
  * @param markdown - Markdown 格式的文本字符串
  * @returns 提取的代码块内容数组
- * 
+ *
  * @example
  * extractCodeBlocksContent('```js\nconsole.log("hello")\n```') // ['console.log("hello")']
  */
@@ -71,13 +71,13 @@ export function extractCodeBlocksContent(markdown: string) {
 /**
  * 基于 ky 库封装的 HTTP 请求函数
  * 支持 GET 和 POST 方法，自动处理请求头和超时设置
- * 
+ *
  * @param url - 请求的 URL 地址
  * @param method - HTTP 请求方法，支持 'post' 或 'get'
  * @param body - 请求体数据，仅在 POST 请求时使用
  * @param headersOpts - 自定义请求头选项
  * @returns ky 的 Response 对象
- * 
+ *
  * @example
  * const response = await fetchApi('https://api.example.com/data', 'get')
  * const response = await fetchApi('https://api.example.com/submit', 'post', { name: 'test' }, { 'Authorization': 'Bearer token' })
@@ -131,11 +131,11 @@ export async function getApiConfig() {
 /**
  * 根据错误码和语言环境返回对应的错误消息
  * 支持中文、英文、日文三种语言，返回包含 HTML 格式的错误信息
- * 
+ *
  * @param message - 错误消息，可以是错误码（数字）或自定义消息（字符串）
  * @param language - 语言环境，支持 'chinese' | 'english' | 'japanese'
  * @returns HTML 格式的错误消息字符串
- * 
+ *
  * @example
  * errMessage(-10001, 'chinese') // "账户凭证丢失，请 <a href='/auth'>重新登录</a>"
  * errMessage('Custom error', 'english') // "Custom error"
