@@ -71,6 +71,7 @@ main:
             username: ${GIT_USERNAME}
             password: ${GIT_ACCESS_TOKEN}
             branch: main
+            force: true
             git_user: ${GIT_USERNAME}
             git_email: ${GIT_EMAIL}
   "crontab: 0 0 1 * *":
