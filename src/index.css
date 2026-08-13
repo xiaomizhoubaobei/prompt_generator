@@ -24,9 +24,8 @@
  *          - 所有页面组件共享此样式
  *          - 可以通过 .dark 类切换到暗色主题
  */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 /* Image Scanning animation */
 .scanning::after {
