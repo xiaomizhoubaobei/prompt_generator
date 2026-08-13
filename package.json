@@ -59,6 +59,7 @@
     "vite": "^7.3.2"
   },
   "resolutions": {
-    "nanoid": "3.3.17"
+    "nanoid": "3.3.17",
+    "js-yaml": "4.3.1"
   }
 }
