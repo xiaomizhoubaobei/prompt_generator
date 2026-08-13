@@ -80,6 +80,13 @@ jobs:
                 tags: |
                   type=raw,value=${{ steps.version.outputs.VERSION }}
 
+            - name: 获取基础镜像摘要（nginx:alpine）
+              id: baseimg
+              run: |
+                  BASE_DIGEST=$(docker buildx imagetools inspect nginx:alpine --format '{{.Manifest.Digest}}' 2>/dev/null || echo "")
+                  echo "BASE_DIGEST=$BASE_DIGEST" >> $GITHUB_OUTPUT
+                  echo "基础镜像 nginx:alpine 摘要: $BASE_DIGEST"
+
             - name: 构建并推送（主流容器注册表，支持 OCI）
               id: build
               uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -90,6 +97,8 @@ jobs:
                 tags: ${{ steps.meta.outputs.tags }}
                 labels: |
                   org.opencontainers.image.source=https://github.com/xiaomizhoubaobei/LLM-Playground
+                  org.opencontainers.image.url=https://github.com/xiaomizhoubaobei/LLM-Playground
+                  org.opencontainers.image.documentation=https://github.com/xiaomizhoubaobei/LLM-Playground#readme
                   org.opencontainers.image.description=LLM Playground - 一个用于测试和实验大语言模型的交互式平台
                   org.opencontainers.image.licenses=AGPL-3.0
                   org.opencontainers.image.title=LLM Playground
@@ -98,7 +107,10 @@ jobs:
                   org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
                   org.opencontainers.image.revision=${{ github.sha }}
                   org.opencontainers.image.vendor=xiaomizhoubaobei
-                  org.opencontainers.image.authors=qixiaoxin@stu.sqxy.edu.cn
+                  org.opencontainers.image.ref.name=302_prompt_generator:${{ steps.version.outputs.VERSION }}
+                  org.opencontainers.image.base.name=nginx:alpine
+                  org.opencontainers.image.base.digest=${{ steps.baseimg.outputs.BASE_DIGEST }}
+                  org.opencontainers.image.authors=祁筱欣 <qixiaoxin@stu.sqxy.esu.cn>
                   build.url=https://github.com/xiaomizhoubaobei/LLM-Playground/actions/runs/${{ github.run_id }}
                   dependencies.node=${{ steps.deps.outputs.NODE_VERSION }}
                   org.opencontainers.image.react=${{ steps.deps.outputs.REACT_VERSION }}
