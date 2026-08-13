@@ -56,7 +56,7 @@
     "globals": "^17.9.0",
     "typescript": "^5.2.2",
     "typescript-eslint": "^8.18.2",
-    "vite": "^7.3.2"
+    "vite": "^7.3.5"
   },
   "resolutions": {
     "nanoid": "3.3.17",
