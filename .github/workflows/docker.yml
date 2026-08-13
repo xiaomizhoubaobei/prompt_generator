@@ -51,13 +51,6 @@ jobs:
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: 登录阿里云容器注册表
-              uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-              with:
-                  registry: crpi-wk2d8umombj539de.cn-shanghai.personal.cr.aliyuncs.com
-                  username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
-                  password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
-
             - name: 提取依赖版本
               id: deps
               run: |
@@ -80,7 +73,6 @@ jobs:
                 images: |
                   ${{ secrets.DOCKERHUB_USERNAME }}/302_prompt_generator
                   ghcr.io/${{ github.repository }}
-                  crpi-wk2d8umombj539de.cn-shanghai.personal.cr.aliyuncs.com/xmz-1/302_prompt_generator
                 # 关闭所有默认生成器
                 flavor: |
                   latest=false
@@ -126,11 +118,6 @@ jobs:
               run: |
                   echo "使用 cosign 无密钥模式签名镜像..."
                   while IFS= read -r tag; do
-                      # 跳过阿里云 ACR 镜像（不支持签名）
-                      if [[ "$tag" == *"crpi-"* ]]; then
-                          echo "跳过阿里云 ACR 镜像: $tag"
-                          continue
-                      fi
                       echo "正在签名 $tag"
                       cosign sign --yes "$tag"
                   done <<< "${{ steps.meta.outputs.tags }}"
