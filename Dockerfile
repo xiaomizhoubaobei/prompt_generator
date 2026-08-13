@@ -5,13 +5,13 @@ FROM node:lts-alpine AS base
 WORKDIR /app
 
 # 复制依赖文件
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# 设置国内镜像源
-RUN yarn config set registry 'https://registry.npmmirror.com/'
+# 安装 pnpm 并设置国内镜像源
+RUN npm install -g pnpm@11.21.0 && pnpm config set registry 'https://registry.npmmirror.com/'
 
-# 安装生产依赖
-RUN yarn install --frozen-lockfile --production=false
+# 安装依赖（包含 devDependencies 用于构建）
+RUN pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY . .
@@ -39,7 +39,7 @@ ENV VITE_APP_OFFICIAL_WEBSITE_URL_GLOBAL=${VITE_APP_OFFICIAL_WEBSITE_URL_GLOBAL}
 ENV VITE_APP_UPLOAD_API_URL=${VITE_APP_UPLOAD_API_URL}
 
 # 构建应用
-RUN yarn build
+RUN pnpm build
 
 # 生产镜像 - 使用 nginx
 FROM nginx:alpine AS production

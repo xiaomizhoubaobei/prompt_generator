@@ -61,9 +61,9 @@ AIプロンプトエキスパートで、あなたのアイデアを完璧なAI�
 
 ### 方法1：ローカル開発
 1. プロジェクトのクローン `git clone https://github.com/302ai/302_prompt_generator`
-2. 依存関係のインストール `yarn install`
+2. 依存関係のインストール `pnpm install`
 3. 302のAPI KEYの設定 .env.exampleを参照
-4. プロジェクトの実行 `yarn dev`
+4. プロジェクトの実行 `pnpm dev`
 5. http://localhost:5173 にアクセス
 
 ### 方法2：Dockerデプロイ

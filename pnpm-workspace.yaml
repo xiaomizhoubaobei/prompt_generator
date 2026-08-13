@@ -1,0 +1,12 @@
+# pnpm 11 配置文件
+# 依赖版本覆盖（原 yarn resolutions，用于安全修复固定版本）
+overrides:
+  nanoid: 3.3.17
+  js-yaml: 4.3.1
+  esbuild: 0.28.1
+  picomatch: 4.0.4
+  flatted: 3.4.2
+
+# 允许执行构建脚本的依赖（esbuild 需要 postinstall 脚本）
+allowBuilds:
+  esbuild: true

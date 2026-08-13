@@ -30,3 +30,6 @@ dist-ssr
 
 # Docker
 .dockerignore
+
+# pnpm store
+.pnpm-store/

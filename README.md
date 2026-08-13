@@ -55,9 +55,9 @@
 
 ### 方式一：本地开发
 1. 克隆项目 `git clone https://github.com/302ai/302_prompt_generator`
-2. 安装依赖 `yarn install`
+2. 安装依赖 `pnpm install`
 3. 配置302的API KEY 参考.env.example
-4. 运行项目 `yarn dev`
+4. 运行项目 `pnpm dev`
 5. 访问 http://localhost:5173
 
 ### 方式二：Docker 部署

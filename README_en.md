@@ -58,9 +58,9 @@ Through AI Prompt Expert! - Transform your ideas into perfect AI instructions! ð
 
 ### Method 1: Local Development
 1. Clone project `git clone https://github.com/302ai/302_prompt_generator`
-2. Install dependencies `yarn install`
+2. Install dependencies `pnpm install`
 3. Configure 302's API KEY (refer to .env.example)
-4. Run project `yarn dev`
+4. Run project `pnpm dev`
 5. Visit http://localhost:5173
 
 ### Method 2: Docker Deployment
