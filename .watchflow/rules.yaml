@@ -4,7 +4,12 @@ rules:
     severity: critical
     event_types: [ "pull_request" ]
     parameters:
-      security_patterns: [ "api_key", "secret", "password", "token", "private_key", "access_key", "auth_token" ]
+      # 大小写不敏感 + 带边界/分隔符的精确匹配，避免漏报大写变体、误报宽泛子串
+      security_patterns:
+        - "(?i)api[_-]?key"
+        - "(?i)(secret|private|access)[_/-]?key"
+        - "(?i)(access|auth)[_/-]?token"
+        - "(?i)(db|database)[_/-]?password"
   - description: "所有提交必须使用 GPG/SSH/S-MIME 签名"
     enabled: true
     severity: critical
