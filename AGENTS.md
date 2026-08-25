@@ -140,6 +140,14 @@ bash install_gpg_keys.sh
 - 本仓库 `.cnb.yml` 在 `main: push` 事件下配置了 `git-sync` stage，目标为 `https://github.com/xiaomizhoubaobei/prompt_generator.git`，**属于"同步到 Github 镜像仓库"的情形**，因此必须在 Github 镜像仓库同步创建完全一致的 PR。
 - 这是**强制性要求**，不得遗漏，确保 CNB 与 Github 镜像仓库的代码变更保持同步、可追踪。
 
+### 3.6 GH_TOKEN 环境变量（Github Token）
+- 在执行与 **Github 镜像仓库**相关的同步/推送/创建 PR 等操作时，需要用到 Github 的访问令牌，其对应的环境变量名为 **`GH_TOKEN`**（即 Github Personal Access Token）。
+- **用途**：用于对 `github.com/xiaomizhoubaobei/prompt_generator` 镜像仓库的鉴权，支持向该镜像仓库同步代码、推送分支以及通过 Github API 创建一模一样的 PR。
+- **安全要求**：
+  - `GH_TOKEN` 属于敏感凭据，**严禁**将其硬编码写入源码、AGENTS.md 或其他任何被提交到仓库的文件中。
+  - 必须通过 CI/CD 流水线的密钥/环境注入机制（如 CNB 的密钥管理或 `.cnb.yml` 中声明）安全注入到运行环境，供 Agent 在运行时读取。
+  - 提交前 gitleaks 密钥扫描会拦截疑似泄漏的令牌，若扫描未通过需检查是否误将 `GH_TOKEN` 值写入文件。
+
 ## 4. 持续集成与部署规范 (CI/CD - .cnb.yml)
 
 ### 4.1 配置文件规范
