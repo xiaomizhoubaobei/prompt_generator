@@ -151,8 +151,9 @@ bash install_gpg_keys.sh
   - 该凭据由流水线自动使用，Agent 一般无需直接调用；**不要**用它去调用 `gh` CLI 或 Github API。
 
 **安全要求（对上述所有凭据均适用）**：
-- 这些令牌属于敏感凭据，**严禁**将其硬编码写入源码、AGENTS.md 或其他任何被提交到仓库的文件中。
-- 必须通过 CI/CD 流水线的密钥/环境注入机制（如 CNB 的密钥管理，或 `.cnb.yml` 中通过 `imports` 引入的密钥配置）安全注入到运行环境，供流水线与 Agent 在运行时读取。
+- `GH_TOKEN` 与 `GIT_ACCESS_TOKEN`（含 `GIT_USERNAME` / `GIT_EMAIL`）**均属于敏感凭据**，**严禁**将其硬编码写入源码、AGENTS.md、`.cnb.yml` 或其他任何被提交到仓库的文件中，也**严禁**将其值打印到构建日志、终端回显或输出到 PR / Issue 评论中。
+- 两者**统一由 CNB 密钥管理注入**：本仓库在 `.cnb.yml` 的 `main: push` 事件中通过 `imports: https://cnb.cool/XMZZUZHI/key/-/blob/main/Github.yml` 引入密钥配置，由流水线在运行时以环境变量形式提供。配置与脚本中**只能**以 `${GH_TOKEN}`、`${GIT_ACCESS_TOKEN}` 等变量引用，严禁写入明文值，也严禁自行生成、替换或落盘保存凭据。
+- 若相关变量未注入（读取为空），必须如实上报「凭据未注入」并停止对应操作，严禁改用明文 token 顶替。
 - 提交前 gitleaks 密钥扫描会拦截疑似泄漏的令牌，若扫描未通过需检查是否误将 `GH_TOKEN` / `GIT_ACCESS_TOKEN` 的值写入文件。
 
 ## 4. 持续集成与部署规范 (CI/CD - .cnb.yml)
