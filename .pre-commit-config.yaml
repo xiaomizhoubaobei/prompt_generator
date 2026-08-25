@@ -13,3 +13,10 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
       - id: check-toml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
