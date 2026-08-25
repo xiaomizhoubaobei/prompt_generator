@@ -1,0 +1,25 @@
+rules:
+  - description: "禁止在代码变更中硬编码密钥或敏感信息"
+    enabled: true
+    severity: critical
+    event_types: [ "pull_request" ]
+    parameters:
+      security_patterns: [ "api_key", "secret", "password", "token", "private_key", "access_key", "auth_token" ]
+  - description: "所有提交必须使用 GPG/SSH/S-MIME 签名"
+    enabled: true
+    severity: critical
+    event_types: [ "pull_request" ]
+    parameters:
+      require_signed_commits: true
+  - description: "禁止直接合并到受保护分支，必须通过 PR 流程"
+    enabled: true
+    severity: critical
+    event_types: [ "pull_request" ]
+    parameters:
+      protected_branches: [ "main", "master" ]
+  - description: "PR 标题必须符合 Conventional Commits 规范"
+    enabled: true
+    severity: high
+    event_types: [ "pull_request" ]
+    parameters:
+      title_pattern: "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\\(.+\\))?!?: .+"
