@@ -11,10 +11,10 @@ rules:
     event_types: [ "pull_request" ]
     parameters:
       require_signed_commits: true
-  - description: "禁止直接合并到受保护分支，必须通过 PR 流程"
+  - description: "禁止绕过 PR 直接推送到受保护分支，必须通过 PR 流程变更"
     enabled: true
     severity: critical
-    event_types: [ "pull_request" ]
+    event_types: [ "push" ]
     parameters:
       protected_branches: [ "main", "master" ]
   - description: "PR 标题必须符合 Conventional Commits 规范"
