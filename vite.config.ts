@@ -14,7 +14,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // rolldown-vite（vite 8）不再支持对象形式的 manualChunks，仅接受函数形式
-        // 这里改写为函数形式，从模块 id 中精确提取包名进行分包，保持与原对象配置一致的分包逻辑
+        // 这里改写为函数形式，从模块 id 中精确提取包名并按命名空间归集分包
+        // （相比原对象配置覆盖了同族包，并将 react-router-dom 纳入 react-vendor）
         manualChunks(id) {
           // 仅处理 node_modules 中的依赖模块，避免对业务源码误分包
           if (!id.includes('node_modules')) return undefined;
