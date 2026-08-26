@@ -42,7 +42,7 @@
     "codemirror": "^6.0.1",
     "copy-to-clipboard": "^3.3.3",
     "ky": "^1.7.2",
-    "lucide-react": "^1.31.0",
+    "lucide-react": "^1.33.0",
     "path": "^0.12.7",
     "postcss": "^8.5.23",
     "react": "^19.2.8",
