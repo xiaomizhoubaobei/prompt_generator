@@ -42,8 +42,11 @@ jobs:
 
     - name: 安装依赖并构建（自定义构建，CodeQL autobuild 无法自动识别 pnpm 项目）
       run: |
-        npm install -g pnpm
-        pnpm install
+        # 使用 corepack 尊重 package.json 中置顶的 pnpm 版本，避免误装 NPM 最新版导致锁文件不匹配
+        corepack enable
+        corepack prepare pnpm@11.21.0 --activate
+        # 使用 --frozen-lockfile，若锁文件与 package.json 不同步则快速失败而非悄然变更
+        pnpm install --frozen-lockfile
         pnpm build
 
     - name: 执行 CodeQL 分析
