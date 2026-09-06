@@ -1,0 +1,125 @@
+# =============================================================================
+# Issue 开启钉钉通知
+# =============================================================================
+# 用途：当仓库有新 Issue 被创建(open)时，自动向钉钉群机器人发送一条通知消息，
+#       让维护者第一时间感知新问题 / 需求 / 建议，无需守着仓库刷新。
+#
+# 触发设计：
+#   - issues.types: [opened]：仅监听「新建 Issue」事件，避免 reopened / closed 等
+#     其它状态反复打扰（如需监听 reopen，可在 types 中追加 reopened）。
+#   - workflow_dispatch：保留手动触发，便于首次部署时人工验证链路是否打通。
+#
+# 安全与最小权限：
+#   - 顶层 GITHUB_TOKEN 仅授予 contents: read；本工作流不读写代码，只消费事件
+#     载荷里的 Issue 信息并外发到钉钉。
+#   - 钉钉 Webhook 与加签密钥均从仓库 Secrets 读取（绝不硬编码进源码），且只在
+#     真正执行发送的唯一 step（step 级 env）注入，收敛凭据暴露面。
+#
+# 所需 Secrets（仓库 Settings → Secrets and variables → Actions）：
+#   - DINGTALK_WEBHOOK  必填，钉钉群机器人 Webhook 完整地址
+#                       形如 https://oapi.dingtalk.com/robot/send?access_token=xxxx
+#   - DINGTALK_SECRET   必填，钉钉自定义机器人「安全设置 → 加签」里的 SEC 密钥，
+#                       用于 HMAC-SHA256 生成签名 sign = urlencode(base64(hmac(timestamp\nsecret)))
+#
+# 钉钉加签说明：机器人若启用「加签」，每次请求需携带 timestamp 与 sign；本工作流
+# 用 python3（GitHub 官方 runner 自带）按钉钉官方示例实现签名，不引入第三方依赖。
+# =============================================================================
+
+name: Issue 开启钉钉通知
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch: # 便于手动验证链路
+
+permissions:
+  contents: read
+
+jobs:
+  dingtalk-notify:
+    name: 发送钉钉通知
+    runs-on: ubuntu-latest
+    # 仅监听「新建 Issue」或「手动触发」，其它情况直接跳过
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.action == 'opened'
+
+    steps:
+      # 加固运行器（audit 模式：记录所有出站调用，便于事后审计）
+      - name: 加固运行器（审计所有出站调用）
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # 向钉钉群发送「新建 Issue」通知
+      # 凭据仅在真正执行发送的唯一 step 注入（step 级 env），其余步骤不暴露。
+      # 若 Secrets 未配置则打印提示并以 0 退出（幂等跳过），不中断流水线。
+      - name: 发送钉钉「新建 Issue」通知
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          # 手动触发时没有真实 Issue 事件，以下字段可为空，走默认文案
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_USER: ${{ github.event.issue.user.login }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import os, time, hmac, hashlib, base64, urllib.parse, urllib.request, json
+
+          webhook = os.environ.get('DINGTALK_WEBHOOK', '')
+          secret = os.environ.get('DINGTALK_SECRET', '')
+          if not webhook or not secret:
+              print("提示：尚未配置 DINGTALK_WEBHOOK / DINGTALK_SECRET，跳过发送（幂等）")
+              raise SystemExit(0)
+
+          repo = os.environ.get('REPO_NAME', 'unknown/repo')
+          num = os.environ.get('ISSUE_NUMBER', '')
+          title = (os.environ.get('ISSUE_TITLE') or '').strip()
+          body = (os.environ.get('ISSUE_BODY') or '').strip()
+          user = (os.environ.get('ISSUE_USER') or '').strip()
+          url = os.environ.get('ISSUE_URL', '')
+
+          # 组装「新建 Issue」文本
+          lines = []
+          if num and title:
+              lines.append("【{}】有新 Issue #{}：{}".format(repo, num, title))
+              if user:
+                  lines.append("提交者：@{}".format(user))
+              if body:
+                  lines.append("详情：{}".format(body[:300]))
+              if url:
+                  lines.append("链接：{}".format(url))
+          else:
+              lines.append("【{}】新 Issue 通知（手动触发生成，无真实 Issue 载荷）".format(repo))
+          content = "\n".join(lines)
+
+          # 钉钉加签：timestamp = 毫秒级时间戳；sign = urlencode(base64(hmac_sha256(timestamp\nsecret, secret)))
+          timestamp = str(round(time.time() * 1000))
+          secret_enc = secret.encode('utf-8')
+          string_to_sign = '{}\n{}'.format(timestamp, secret)
+          hmac_code = hmac.new(secret_enc, string_to_sign.encode('utf-8'),
+                               digestmod=hashlib.sha256).digest()
+          sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+
+          # webhook 可能已含 ?access_token=xx，需用 & 追加 timestamp/sign
+          sep = '&' if '?' in webhook else '?'
+          target = '{}{}timestamp={}&sign={}'.format(webhook, sep, timestamp, sign)
+
+          payload = json.dumps({"msgtype": "text", "text": {"content": content}}).encode('utf-8')
+          req = urllib.request.Request(target, data=payload,
+                                       headers={'Content-Type': 'application/json'})
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  result = json.loads(resp.read().decode('utf-8'))
+                  if result.get('errcode') == 0:
+                      print("钉钉通知发送成功：errcode=0 errmsg={}".format(result.get('errmsg')))
+                  else:
+                      print("钉钉返回错误：{}".format(result))
+                      raise SystemExit(1)
+          except urllib.error.HTTPError as e:
+              print("钉钉 HTTP 错误：{} {}".format(e.code, e.read().decode('utf-8')))
+              raise SystemExit(1)
+          EOF
