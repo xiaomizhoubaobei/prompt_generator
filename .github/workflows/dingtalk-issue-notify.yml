@@ -67,11 +67,13 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_USER: ${{ github.event.issue.user.login }}
           ISSUE_USER_URL: ${{ github.event.issue.user.html_url }}
+          ISSUE_CREATED_AT: ${{ github.event.issue.created_at }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           REPO_NAME: ${{ github.repository }}
         run: |
           python3 - <<'EOF'
           import os, re, time, hmac, hashlib, base64, urllib.parse, urllib.request, json
+          from datetime import datetime, timezone
 
           webhook = os.environ.get('DINGTALK_WEBHOOK', '')
           secret = os.environ.get('DINGTALK_SECRET', '')
@@ -125,11 +127,45 @@ jobs:
           labels = seen[:10]
           user_url = (os.environ.get('ISSUE_USER_URL') or '').strip()
 
+          # 解析 Issue 打开时间（github.event.issue.created_at 为 ISO8601 UTC 时间），
+          # 转成可读的「YYYY-MM-DD HH:MM UTC」便于维护者判断该 Issue 的新旧与积压时长。
+          # 解析失败或缺失时置空，仅告警不阻断发送。
+          created_at_raw = os.environ.get('ISSUE_CREATED_AT', '').strip()
+          created_display = ''
+          if created_at_raw:
+              try:
+                  # 兼容带/不带小数秒与 Z 时区后缀的常见格式
+                  created_iso = created_at_raw
+                  if created_iso.endswith('Z'):
+                      created_iso = created_iso[:-1] + '+00:00'
+                  # 去除可能的小数秒，datetime.fromisoformat 在部分版本无法解析小数秒
+                  if '.' in created_iso:
+                      # 小数秒在部分 Python 版本 fromisoformat 无法解析，去掉之。
+                      # tail 可能还带着 +00:00 / +0000 这类时区后缀，需保留。
+                      head, _, tail = created_iso.partition('.')
+                      tz_idx = tail.find('+')
+                      if tz_idx < 0:
+                          tz_idx = tail.find('-', 1)
+                      tz = tail[tz_idx:] if tz_idx >= 0 else ''
+                      created_iso = head + tz
+                  created_dt = datetime.fromisoformat(created_iso)
+                  # 统一转成 UTC 展示，避免时区歧义
+                  if created_dt.tzinfo is not None:
+                      created_dt = created_dt.astimezone(timezone.utc)
+                  created_display = created_dt.strftime('%Y-%m-%d %H:%M UTC')
+              except Exception as e:
+                  print("警告：解析 Issue created_at 失败，将不展示时间：{}".format(e))
+                  created_display = ''
+
           # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
           md_lines = []
           if num and title:
               # 一级标题突出 Issue 标题，正文用列表条目逐项展示
               md_lines.append("### 新 Issue #{}：{}".format(num, title))
+              if repo:
+                  # 顶部加仓库归属行：钉钉通知栏标题虽已含仓库，正文再标一次，
+                  # 便于截图/转发给他人时仍能一眼看出来源仓库（多仓库共用一个机器人时尤为重要）
+                  md_lines.append("- **仓库：** {}".format(repo))
               if user:
                   # 提交者以普通文本 + 可点击主页链接呈现（钉钉机器人无法真正 @ 到人，
                   # 故不再使用无效的 @ 前缀；附主页链接便于维护者一键溯源是谁提的 Issue）
@@ -143,6 +179,9 @@ jobs:
               if body:
                   # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
                   md_lines.append("- **详情：** {}".format(body))
+              if created_display:
+                  # 标注 Issue 打开时间，便于判断该问题的新旧与积压时长
+                  md_lines.append("- **时间：** {}".format(created_display))
               if url:
                   # 提供可点击链接，一键直达 Issue 页面
                   md_lines.append("- **直达：** [前往查看 Issue #{}]({})".format(num, url))
