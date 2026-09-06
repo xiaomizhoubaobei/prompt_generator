@@ -3,124 +3,71 @@
 # Version: 2.0
 # NOTE: This file supplements (does not replace) any existing curated instincts.
 # High-confidence manually curated instincts should be preserved alongside these.
+# 由原“多 YAML 文档”重构为单个 YAML 文档，以通过 pre-commit check-yaml。
 
----
-id: prompt_generator-commit-conventional
-trigger: "when writing a commit message"
-confidence: 0.85
-domain: git
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
+- id: prompt_generator-commit-conventional
+  trigger: "when writing a commit message"
+  confidence: 0.85
+  domain: git
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Commit Conventional
+  # action: Use conventional commit format with prefixes: feat
+  # evidence: 1 commits analyzed
+  # evidence: Detected conventional commit pattern
+  # evidence: Examples: feat(ai-audit): 参考 MZAPI/python 适配新增 TypeScript 版 AI 审计源码
 
-# Prompt_generator Commit Conventional
+- id: prompt_generator-commit-length
+  trigger: "when writing a commit message"
+  confidence: 0.6
+  domain: git
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Commit Length
+  # action: Write moderate-length commit messages (~57 characters)
+  # evidence: Average commit message length: 57 chars
+  # evidence: Based on 1 commits
 
-## Action
+- id: prompt_generator-naming-files
+  trigger: "when creating a new file"
+  confidence: 0.8
+  domain: code-style
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Naming Files
+  # action: Use snake_case naming convention
+  # evidence: Analyzed file naming patterns in repository
+  # evidence: Dominant pattern: snake_case
 
-Use conventional commit format with prefixes: feat
+- id: prompt_generator-import-relative
+  trigger: "when importing modules"
+  confidence: 0.75
+  domain: code-style
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Import Relative
+  # action: Use relative imports for project files
+  # evidence: Import analysis shows relative import pattern
+  # evidence: Example: import { x } from '../lib/x'
 
-## Evidence
+- id: prompt_generator-export-style
+  trigger: "when exporting from a module"
+  confidence: 0.7
+  domain: code-style
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Export Style
+  # action: Prefer named exports
+  # evidence: Export pattern analysis
+  # evidence: Dominant style: named
 
-- 1 commits analyzed
-- Detected conventional commit pattern
-- Examples: feat(ai-audit): 参考 MZAPI/python 适配新增 TypeScript 版 AI 审计源码
-
----
-id: prompt_generator-commit-length
-trigger: "when writing a commit message"
-confidence: 0.6
-domain: git
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
-
-# Prompt_generator Commit Length
-
-## Action
-
-Write moderate-length commit messages (~57 characters)
-
-## Evidence
-
-- Average commit message length: 57 chars
-- Based on 1 commits
-
----
-id: prompt_generator-naming-files
-trigger: "when creating a new file"
-confidence: 0.8
-domain: code-style
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
-
-# Prompt_generator Naming Files
-
-## Action
-
-Use snake_case naming convention
-
-## Evidence
-
-- Analyzed file naming patterns in repository
-- Dominant pattern: snake_case
-
----
-id: prompt_generator-import-relative
-trigger: "when importing modules"
-confidence: 0.75
-domain: code-style
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
-
-# Prompt_generator Import Relative
-
-## Action
-
-Use relative imports for project files
-
-## Evidence
-
-- Import analysis shows relative import pattern
-- Example: import { x } from '../lib/x'
-
----
-id: prompt_generator-export-style
-trigger: "when exporting from a module"
-confidence: 0.7
-domain: code-style
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
-
-# Prompt_generator Export Style
-
-## Action
-
-Prefer named exports
-
-## Evidence
-
-- Export pattern analysis
-- Dominant style: named
-
----
-id: prompt_generator-test-separate
-trigger: "when writing tests"
-confidence: 0.8
-domain: testing
-source: repo-analysis
-source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
----
-
-# Prompt_generator Test Separate
-
-## Action
-
-Place tests in the tests/ or __tests__/ directory, mirroring src structure
-
-## Evidence
-
-- Separate test directory pattern detected
-- Tests live in dedicated test folders
+- id: prompt_generator-test-separate
+  trigger: "when writing tests"
+  confidence: 0.8
+  domain: testing
+  source: repo-analysis
+  source_repo: https://github.com/xiaomizhoubaobei/prompt_generator
+  # Prompt_generator Test Separate
+  # action: Place tests in the tests/ or __tests__/ directory, mirroring src structure
+  # evidence: Separate test directory pattern detected
+  # evidence: Tests live in dedicated test folders
