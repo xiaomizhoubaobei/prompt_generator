@@ -97,8 +97,16 @@ jobs:
           cp -r ai-audit seclab-taskflow-agent/ai_audit
 
       # 安装 hatch：锁定版本，避免未加约束的 pip install 拉取到被替换/污染的包
+      # ⚠️ 关键约束：同时把 virtualenv 固定到 <21。hatch 1.14.0 依赖 virtualenv 旧版
+      #    解释器发现 API（virtualenv.discovery.builtin.propose_interpreters）；而
+      #    GitHub Actions ubuntu-latest 运行器默认 Python 预装/可解析的 virtualenv
+      #    21.x 已彻底重构并移除该 API（改用 python_discovery 子包），导致 hatch run
+      #    创建 default 虚拟环境时报：
+      #       Environment `default` is incompatible:
+      #       module 'virtualenv.discovery.builtin' has no attribute 'propose_interpreters'
+      #    因此强制约束 virtualenv<21（解析到 20.x）以兼容 hatch 1.14.0。
       - name: 安装 hatch（锁定版本）
-        run: pip install hatch==1.14.0
+        run: pip install hatch==1.14.0 "virtualenv<21"
 
       # 运行 AI 审计 taskflow（消费最新 CodeQL 告警）
       # 说明：凭据仅在真正执行审计的唯一 step 注入（step 级 env），不放到 job 级，
