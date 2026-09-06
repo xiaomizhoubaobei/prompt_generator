@@ -3,6 +3,8 @@
 # =============================================================================
 # 用途：当仓库有新 Issue 被创建(open)时，自动向钉钉群机器人发送一条通知消息，
 #       让维护者第一时间感知新问题 / 需求 / 建议，无需守着仓库刷新。
+#       通知采用钉钉 markdown 卡片结构化排版（标题/提交者/详情/直达链接分条渲染），
+#       比纯文本更利于阅读与定位，一键直达 Issue 页面。
 #
 # 触发设计：
 #   - issues.types: [opened]：仅监听「新建 Issue」事件，避免 reopened / closed 等
@@ -95,19 +97,23 @@ jobs:
           body = _clean(os.environ.get('ISSUE_BODY'), 300)
           user = _clean(os.environ.get('ISSUE_USER'), 30)
 
-          # 组装「新建 Issue」文本
-          lines = []
+          # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
+          md_lines = []
           if num and title:
-              lines.append("【{}】有新 Issue #{}：{}".format(repo, num, title))
+              # 一级标题突出 Issue 标题，正文用列表条目逐项展示
+              md_lines.append("### 新 Issue #{}：{}".format(num, title))
               if user:
-                  lines.append("提交者：@{}".format(user))
+                  md_lines.append("- **提交者：** @{}".format(user))
               if body:
-                  lines.append("详情：{}".format(body))
+                  # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
+                  md_lines.append("- **详情：** {}".format(body))
               if url:
-                  lines.append("链接：{}".format(url))
+                  # 提供可点击链接，一键直达 Issue 页面
+                  md_lines.append("- **直达：** [前往查看 Issue #{}]({})".format(num, url))
           else:
-              lines.append("【{}】新 Issue 通知（手动触发生成，无真实 Issue 载荷）".format(repo))
-          content = "\n".join(lines)
+              md_lines.append("> 手动触发生成的示例通知（无真实 Issue 载荷）")
+          md_text = "\n".join(md_lines)
+          md_title = "【{}】新 Issue #{}".format(repo, num) if (num and title) else "【{}】新 Issue 通知".format(repo)
 
           # 钉钉加签：timestamp = 毫秒级时间戳；sign = urlencode(base64(hmac_sha256(timestamp\nsecret, secret)))
           timestamp = str(round(time.time() * 1000))
@@ -121,7 +127,7 @@ jobs:
           sep = '&' if '?' in webhook else '?'
           target = '{}{}timestamp={}&sign={}'.format(webhook, sep, timestamp, sign)
 
-          payload = json.dumps({"msgtype": "text", "text": {"content": content}}).encode('utf-8')
+          payload = json.dumps({"msgtype": "markdown", "markdown": {"title": md_title, "text": md_text}}).encode('utf-8')
           req = urllib.request.Request(target, data=payload,
                                        headers={'Content-Type': 'application/json'})
           try:
