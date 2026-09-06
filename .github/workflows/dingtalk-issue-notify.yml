@@ -62,6 +62,7 @@ jobs:
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
           # 手动触发时没有真实 Issue 事件，以下字段可为空，走默认文案
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_LABELS: ${{ toJSON(github.event.issue.labels) }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_USER: ${{ github.event.issue.user.login }}
@@ -97,6 +98,31 @@ jobs:
           title = _clean(os.environ.get('ISSUE_TITLE'), 80)
           body = _clean(os.environ.get('ISSUE_BODY'), 300)
           user = _clean(os.environ.get('ISSUE_USER'), 30)
+
+          # 解析 Issue 标签：github.event.issue.labels 是形如
+          # [{"name":"bug","color":"d73a4a",...}, ...] 的 JSON 数组，仅取 name 展示。
+          # workflow_dispatch 手动触发或 Issue 无标签时为空，此时不展示标签条目。
+          labels_raw = os.environ.get('ISSUE_LABELS', '')
+          labels = []
+          if labels_raw and labels_raw.strip() != 'null':
+              try:
+                  parsed = json.loads(labels_raw)
+                  if isinstance(parsed, list):
+                      # 兼容字符串元素与对象元素两种形态，去重并限长
+                      for item in parsed:
+                          if isinstance(item, dict) and item.get('name'):
+                              labels.append(_clean(str(item.get('name')), 30))
+                          elif isinstance(item, str):
+                              labels.append(_clean(item, 30))
+              except Exception as e:
+                  print("警告：解析 Issue labels 失败，将不展示标签：{}".format(e))
+                  labels = []
+          # 去重并限制展示数量（防止恶意堆叠大量标签刷屏）
+          seen = []
+          for lb in labels:
+              if lb and lb not in seen:
+                  seen.append(lb)
+          labels = seen[:10]
           user_url = (os.environ.get('ISSUE_USER_URL') or '').strip()
 
           # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
@@ -111,6 +137,9 @@ jobs:
                       md_lines.append("- **提交者：** [{}]({})".format(user, user_url))
                   else:
                       md_lines.append("- **提交者：** {}".format(user))
+              if labels:
+                  # 以等宽反引号包裹每个标签名，直观展示 Issue 归属类别
+                  md_lines.append("- **标签：** {}".format(' '.join('`{}`'.format(lb) for lb in labels)))
               if body:
                   # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
                   md_lines.append("- **详情：** {}".format(body))
