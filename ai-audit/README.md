@@ -58,7 +58,7 @@ ai-audit/
 ├── README.md                        # 本说明
 ├── __init__.py                      # 使 ai_audit 成为可导入 Python 包（框架 importlib.resources 必需）
 ├── alert_triage_example.yaml        # 5 阶段 AI 审计 taskflow（官方 GRAMMAR 语法）
-├── model_config.yaml                # OpenAI 兼容上游模型配置（模型名 + api_type: chat_completions）
+├── model_config.yaml                # OpenAI 兼容上游模型配置（api_type: chat_completions；模型名由环境变量提供）
 ├── model_config.py                  # [参考] model_config.yaml 的说明文档（框架不读取）
 └── personalities/
     ├── __init__.py                  # 使 personalities 成为可导入子包
@@ -154,7 +154,9 @@ AI_API_TOKEN=<你的APIKey> \
 GITHUB_TOKEN=<你的PAT> \
 hatch run main -t ai_audit.alert_triage_example
 
-# 方式 B：显式指定 model_config（推荐，声明模型名 + api_type: chat_completions，更稳）
+# 方式 B：显式指定 model_config（推荐，声明 api_type: chat_completions，更稳）
+# 模型名由环境变量 COPILOT_DEFAULT_MODEL 提供（免改代码即可切换模型）
+COPILOT_DEFAULT_MODEL=<你的模型名，如 deepseek-v4-flash> \
 AI_API_ENDPOINT=https://api.deepseek.com/v1 \
 AI_API_TOKEN=<你的APIKey> \
 GITHUB_TOKEN=<你的PAT> \
@@ -165,7 +167,9 @@ hatch run main -t ai_audit.alert_triage_example \
 > `model_config.yaml` 是框架实际读取的模型配置文件（`-m` 参数指定模块路径，
 > 框架自动追加 `.yaml` 后缀查找）。`endpoint`/`token` 由环境变量
 > `AI_API_ENDPOINT`/`AI_API_TOKEN` 提供，密钥不会硬编码进仓库。
-> 修改模型名 / 厂商时直接改该文件 `models:` 映射中的模型 ID 即可。
+> **模型名不再写死在 `model_config.yaml` 中**，而是由框架在运行时读取环境变量
+> `COPILOT_DEFAULT_MODEL` 决定，因此修改模型只需改环境变量 / 仓库 Secret
+> （见下方 `AI_MODEL_NAME`），而无需改动本仓库代码。
 > `model_config.py` 仅为说明文档（含背景与配置思路），框架运行时不读取它。
 
 > 定时运行（如 GitHub Actions `schedule` cron 或你的 CI 定时任务）直接执行上面这条命令，
@@ -185,12 +189,14 @@ hatch run main -t ai_audit.alert_triage_example \
 |--------|------|------|
 | `AI_API_ENDPOINT` | ✅ | 上游 base_url（OpenAI 兼容口，如 `https://api.deepseek.com/v1`，或本地 vLLM / Ollama 的 OpenAI 兼容地址） |
 | `AI_API_TOKEN` | ✅ | 对应厂商的 API Key（需支持函数调用） |
+| `AI_MODEL_NAME` | ✅ | 实际调用的模型名（如 `deepseek-v4-flash` / `qwen-max` / `kimi-k2` 等）。工作流运行时将其透传给框架的 `COPILOT_DEFAULT_MODEL` 环境变量，据此切换模型而无需改代码 |
 | `GH_PAT` | ✅ | GitHub PAT，需 `security_events` 读权限（读 CodeQL 告警） + `repo/issues` 写权限（创建真实 Issue） |
 | `MCP_CONFIG` | 可选 | MCP Server（GitHub API）配置 |
 
 > 📌 框架只识别 `AI_API_ENDPOINT` / `AI_API_TOKEN`（即 `AsyncOpenAI(base_url=..., api_key=...)`），
-> 不读取 `OPENAI_API_KEY` / `OPENAI_MODEL`。模型名通过 `model_config.yaml`（`-m ai_audit.model_config`）显式声明，
-> 并指定 `api_type: chat_completions`（OpenAI 兼容标准协议）。
+> 不读取 `OPENAI_API_KEY` / `OPENAI_MODEL`。模型名通过环境变量 `COPILOT_DEFAULT_MODEL` 提供
+> （由仓库 Secret `AI_MODEL_NAME` 透传），`model_config.yaml`（`-m ai_audit.model_config`）仅声明
+> `api_type: chat_completions`（OpenAI 兼容标准协议）。
 
 > ⚠️ 由于示例会为真实漏洞**创建 Issue**，`GH_PAT` 必须具有仓库的 `issues` 写权限，
 > 否则第 ⑤ 步会失败（可注释该步降级为只输出分流结果）。
