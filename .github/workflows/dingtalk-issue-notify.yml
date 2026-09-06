@@ -65,6 +65,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_USER: ${{ github.event.issue.user.login }}
+          ISSUE_USER_URL: ${{ github.event.issue.user.html_url }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           REPO_NAME: ${{ github.repository }}
         run: |
@@ -96,6 +97,7 @@ jobs:
           title = _clean(os.environ.get('ISSUE_TITLE'), 80)
           body = _clean(os.environ.get('ISSUE_BODY'), 300)
           user = _clean(os.environ.get('ISSUE_USER'), 30)
+          user_url = (os.environ.get('ISSUE_USER_URL') or '').strip()
 
           # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
           md_lines = []
@@ -103,7 +105,12 @@ jobs:
               # 一级标题突出 Issue 标题，正文用列表条目逐项展示
               md_lines.append("### 新 Issue #{}：{}".format(num, title))
               if user:
-                  md_lines.append("- **提交者：** {}".format(user))
+                  # 提交者以普通文本 + 可点击主页链接呈现（钉钉机器人无法真正 @ 到人，
+                  # 故不再使用无效的 @ 前缀；附主页链接便于维护者一键溯源是谁提的 Issue）
+                  if user_url:
+                      md_lines.append("- **提交者：** [{}]({})".format(user, user_url))
+                  else:
+                      md_lines.append("- **提交者：** {}".format(user))
               if body:
                   # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
                   md_lines.append("- **详情：** {}".format(body))
@@ -136,9 +143,27 @@ jobs:
                   if result.get('errcode') == 0:
                       print("钉钉通知发送成功：errcode=0 errmsg={}".format(result.get('errmsg')))
                   else:
+                      # 服务端返回非 0 业务错误（如 access_token 失效、加签错误），
+                      # 说明 Secret 配置有问题，应暴露为失败便于排查。
                       print("钉钉返回错误：{}".format(result))
                       raise SystemExit(1)
           except urllib.error.HTTPError as e:
-              print("钉钉 HTTP 错误：{} {}".format(e.code, e.read().decode('utf-8')))
+              # HTTP 层非 2xx（如 4xx/5xx），读出响应体便于定位
+              detail = ""
+              try:
+                  detail = e.read().decode('utf-8')
+              except Exception:
+                  pass
+              print("钉钉 HTTP 错误：{} {}".format(e.code, detail))
+              raise SystemExit(1)
+          except urllib.error.URLError as e:
+              # 网络不可达 / 域名解析失败 / 超时：给出可读提示并失败退出，
+              # 便于人工判断是瞬时抖动（可重试）还是 Webhook 地址配置有误。
+              reason = getattr(e, 'reason', e)
+              print("钉钉网络错误（请检查 Webhook 地址或网络连通性）：{}".format(reason))
+              raise SystemExit(1)
+          except Exception as e:
+              # 其它未知异常兜底，避免 Python 裸堆栈直接把流水线刷红、难以定位
+              print("发送钉钉通知时发生未知异常：{}".format(e))
               raise SystemExit(1)
           EOF
