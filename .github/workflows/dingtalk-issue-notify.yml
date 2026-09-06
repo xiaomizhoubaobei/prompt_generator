@@ -67,7 +67,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
         run: |
           python3 - <<'EOF'
-          import os, time, hmac, hashlib, base64, urllib.parse, urllib.request, json
+          import os, re, time, hmac, hashlib, base64, urllib.parse, urllib.request, json
 
           webhook = os.environ.get('DINGTALK_WEBHOOK', '')
           secret = os.environ.get('DINGTALK_SECRET', '')
@@ -77,10 +77,23 @@ jobs:
 
           repo = os.environ.get('REPO_NAME', 'unknown/repo')
           num = os.environ.get('ISSUE_NUMBER', '')
-          title = (os.environ.get('ISSUE_TITLE') or '').strip()
-          body = (os.environ.get('ISSUE_BODY') or '').strip()
-          user = (os.environ.get('ISSUE_USER') or '').strip()
           url = os.environ.get('ISSUE_URL', '')
+
+          # 对外部可控的 Issue 字段做统一清洗与长度限制，避免超长 / 含控制字符的
+          # 内容直接灌入钉钉（superagent P1：任意 Issue 作者可控 title/body/user）。
+          # 说明：字段经环境变量传入，无 shell 拼接，不构成命令注入；此处主要防
+          # 钉钉推送被滥用（内容超长、换行/控制字符混淆）与刷屏。
+          def _clean(value, limit):
+              if not value:
+                  return ''
+              # 剥离控制字符并折叠多段空白，仅保留可见内容
+              value = re.sub(r'[\x00-\x1f\x7f]', ' ', value)
+              value = re.sub(r'\s+', ' ', value).strip()
+              return value[:limit]
+
+          title = _clean(os.environ.get('ISSUE_TITLE'), 80)
+          body = _clean(os.environ.get('ISSUE_BODY'), 300)
+          user = _clean(os.environ.get('ISSUE_USER'), 30)
 
           # 组装「新建 Issue」文本
           lines = []
@@ -89,7 +102,7 @@ jobs:
               if user:
                   lines.append("提交者：@{}".format(user))
               if body:
-                  lines.append("详情：{}".format(body[:300]))
+                  lines.append("详情：{}".format(body))
               if url:
                   lines.append("链接：{}".format(url))
           else:
