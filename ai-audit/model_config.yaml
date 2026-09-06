@@ -1,8 +1,16 @@
 # =============================================================================
 # OpenAI 兼容上游模型配置（model_config.yaml）
 # =============================================================================
-# 用途：为 AI 审计 taskflow（alert_triage_example.yaml）显式声明要使用的
-#       模型与 API 类型，替代裸依赖框架默认值，保证链路稳定可复现。
+# 用途：为 AI 审计 taskflow（alert_triage_example.yaml）声明使用的 API 类型。
+#       模型名【不再硬编码于此】，改为运行时从环境变量获取（详见下文"模型来源"），
+#       以便在 .github/workflows/ai-audit-scheduled.yml 通过仓库 Secret 灵活切换，
+#       无需改代码 / 重新提交即可更换上游模型。
+#
+# 模型来源（环境变量）：
+#   框架（seclab-taskflow-agent）在选择模型时读取环境变量：
+#       COPILOT_DEFAULT_MODEL —— 覆盖默认模型，即实际调用的模型名
+#   本仓库工作流把仓库 Secret `AI_MODEL_NAME` 透传给 COPILOT_DEFAULT_MODEL，
+#   运行时框架据此选中上游真实模型（如 DeepSeek / 通义千问 / Moonshot / 本地 vLLM 等）。
 #
 # 背景：本框架底层基于 OpenAI Agents Python SDK，直接构造 AsyncOpenAI 客户端：
 #       client = AsyncOpenAI(base_url=<endpoint>, api_key=<token>)
@@ -14,6 +22,9 @@
 #         - DeepSeek / 通义千问(Qwen) / Moonshot 等国产厂商的 OpenAI 兼容接口
 #
 # 使用方式（在运行命令中通过 -m 指定本模块路径，注意不带 .yaml 后缀）：
+#   COPILOT_DEFAULT_MODEL=<你的模型名> \
+#   AI_API_ENDPOINT=https://api.deepseek.com/v1 \
+#   AI_API_TOKEN=<你的APIKey> \
 #   hatch run main -t ai_audit.alert_triage_example \
 #       -m ai_audit.model_config
 #
@@ -29,14 +40,7 @@ seclab-taskflow-agent:
   version: "1.0"
   filetype: model_config
 
-# 模型映射：逻辑名 -> 实际模型 ID
-# 框架在 custom provider（未知端点）下 DEFAULT_MODEL 为
-# "please-set-default-model-via-env"，此处将其映射到实际模型名。
-# 修改模型名 / 厂商时直接改下方映射即可。
-models:
-  please-set-default-model-via-env: deepseek-v4-flash
-
-model_settings:
-  please-set-default-model-via-env:
-    # chat_completions 走 OpenAIChatCompletionsModel（OpenAI 兼容标准协议）
-    api_type: chat_completions
+# chat_completions 走 OpenAIChatCompletionsModel（OpenAI 兼容标准协议）。
+# 模型名一律由环境变量 COPILOT_DEFAULT_MODEL 提供，不在本文件中写死，
+# 便于工作流通过 Secret（AI_MODEL_NAME）按需切换模型而无需改动代码。
+api_type: chat_completions

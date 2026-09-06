@@ -19,6 +19,9 @@
 # 所需 Secrets（仓库 Settings → Secrets and variables → Actions）：
 #   - AI_API_ENDPOINT 必填，上游 base_url（OpenAI 兼容口，如 https://api.deepseek.com/v1）
 #   - AI_API_TOKEN    必填，对应厂商的 API Key（需支持函数调用）
+#   - AI_MODEL_NAME   必填，实际调用的模型名（如 deepseek-v4-flash / qwen-max / kimi-k2 等）。
+#                     框架经环境变量 COPILOT_DEFAULT_MODEL 读取（见 model_config.yaml），
+#                     工作流运行时将本 Secret 透传过去，从而免改代码即可切换模型。
 #   - GH_PAT          必填，GitHub PAT，需同时含以下权限：
 #                     · security_events 读权限 —— 读取本仓库 CodeQL 告警
 #                     · repo / issues 写权限   —— 为确认的漏洞创建真实 Issue
@@ -123,13 +126,19 @@ jobs:
           # 用 GH_TOKEN（即 GH_PAT，含 repo/issues 写权限）授权
           AI_API_ENDPOINT: ${{ secrets.AI_API_ENDPOINT }}
           AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           MCP_CONFIG: ${{ secrets.MCP_CONFIG }}
           # 默认审计本仓库，如需改为其它仓库可改这里（owner/repo）
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          # -m 显式指定 model_config（声明模型与 api_type: chat_completions）
+          # 模型从仓库 Secret AI_MODEL_NAME 经 COPILOT_DEFAULT_MODEL 传入框架，
+          # 因此调用前必须确保其非空（GitHub Actions 未配置的 Secret 会解析成空串）
+          : "${AI_MODEL_NAME:?请配置仓库 Secret AI_MODEL_NAME 以指定 AI 审计所用模型}"
+          export COPILOT_DEFAULT_MODEL="${AI_MODEL_NAME}"
+          # -m 显式指定 model_config（声明 api_type: chat_completions；模型由上面的
+          #    COPILOT_DEFAULT_MODEL 环境变量决定，见 ai-audit/model_config.yaml）
           hatch run main -t ai_audit.alert_triage_example \
               -m ai_audit.model_config
 
