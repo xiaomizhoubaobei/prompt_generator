@@ -1,0 +1,238 @@
+# =============================================================================
+# AI 审计 Taskflow 测试示例 — TypeScript / React 仓库（已按官方 GRAMMAR 语法适配）
+# =============================================================================
+# 用途：对 CodeQL 静态扫描在本仓库（src/**）产生的安全告警做 AI 分流。
+# 框架：GitHubSecurityLab/seclab-taskflow-agent
+# 说明：
+#   - 本文件是一个"测试用示例"，用于验证 AI 审计链路能跑通（CodeQL 告警 -> 信息收集 -> 审计 -> 报告 -> 校验 -> 创建真实 Issue -> 知识回流）。
+#   - 已按官方 doc/GRAMMAR.md 语法编写：seclab-taskflow-agent 头部 + filetype: taskflow、
+#     顶层 taskflow key、agents 引用 personalities、shell run 任务 + outputs JSON Schema 校验、
+#     repeat_prompt/over 批量循环等。
+#   - 为适配本项目（TypeScript/React），使用项目自带的 TypeScript 审计人格
+#     ai_audit.personalities.ts_auditer，而非官方默认的 C 语言人格
+#     c_auditer（详见 personalities/ts_auditer.yaml）。
+#   - 引用路径 ai_audit.* 假设已将 ai-audit 目录（重命名为 ai_audit）
+#     复制到框架仓库根目录（而非 examples/，那样会变成 examples.ai_audit 导致
+#     模块路径对不上）；详见 README.md 的部署说明。
+#   - 请先阅读同目录下的 README.md 了解运行前提（LLM 配置、GitHub PAT、MCP Server、人格模块路径）。
+#
+# 适配语言：TypeScript / JavaScript
+# 告警输入：由 .github/workflows/codeql.yml 扫描 src/** 产生的 CodeQL 安全告警
+# 运行方式：hatch run main -t ai_audit.alert_triage_example （详见 README.md 部署说明）
+# =============================================================================
+
+seclab-taskflow-agent:
+  version: "1.0"
+  filetype: taskflow
+
+# 可选：引入模型配置（参照 examples/model_configs/），如无需可删除本行
+# model_config: examples.model_configs.model_config
+
+# 仓库名（owner/repo），用于第 5 步创建真实 Issue；也可通过 -g repo=... 覆盖
+globals:
+  repo: xiaomizhoubaobei/prompt_generator
+
+taskflow:
+  # ---------------------------------------------------------------------------
+  # 0) 准备：从 GitHub Code Scanning API 拉取「最新 CodeQL 安全告警」，
+  #    生成待审计告警的 JSON 可迭代列表，供后续 repeat_prompt 批量循环。
+  #    通过 id + outputs（JSON Schema）暴露为命名输出 outputs.alerts，供下游 over 显式引用。
+  #    （不再使用写死的占位 JSON，定时运行会真正消费仓库的最新 CodeQL 告警）
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      id: alerts
+      run: |
+        # 需要 GITHUB_TOKEN（PAT，含 security_events 读权限）来读取 CodeQL 告警
+        : "${GITHUB_TOKEN:?请设置 GITHUB_TOKEN 环境变量以读取 CodeQL 告警}"
+        # 仓库使用 GITHUB_REPOSITORY（owner/repo），未设置时回退到默认仓库
+        : "${GITHUB_REPOSITORY:=xiaomizhoubaobei/prompt_generator}"
+        # 拉取状态为 open 的最新 CodeQL 告警（最多 100 条，可按需调整 per_page）
+        curl -fsSL \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          "https://api.github.com/repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&tool_name=CodeQL&per_page=100" \
+        | jq -c '
+            map({
+              alert_number: .number,
+              rule: (.rule.id // .rule.description // "unknown"),
+              path: (.most_recent_instance.location.path // "unknown"),
+              message: (.most_recent_instance.message.text // "")
+            })
+          ' > /tmp/alerts.json
+        # 将映射结果写入命名输出 outputs.alerts（后续 repeat_prompt/over 引用）
+        cat /tmp/alerts.json
+        # 无告警时给 stderr 写一条明确提示，避免下游 repeat_prompt 反复输出空迭代告警
+        # （提示写入 stderr，不污染 stdout 的纯 JSON，保证命名输出可被正确解析）
+        if [ "$(jq 'length' /tmp/alerts.json)" -eq 0 ]; then
+          echo "INFO: 仓库 ${GITHUB_REPOSITORY} 当前没有 open 的 CodeQL 告警，无需 AI 分流，任务提前正常结束。" >&2
+        fi
+      # 校验生成的 JSON 结构，避免幻觉 / 结构错误传入下游
+      outputs:
+        type: array
+        items:
+          type: object
+          properties:
+            alert_number:
+              type: integer
+            rule:
+              type: string
+            path:
+              type: string
+            message:
+              type: string
+          required: [alert_number, rule, path, message]
+
+  # ---------------------------------------------------------------------------
+  # 1) 信息收集：调 GitHub API / MCP Server 拿告警上下文（触发点、调用链、权限）
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过，避免对空迭代反复输出「repeat_prompt iterable is empty!」噪音
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      user_prompt: |
+        你是一名 TypeScript / JavaScript 安全审计员。针对以下 CodeQL 安全告警 {{ result.alert_number }}
+        （规则：{{ result.rule }}，文件：{{ result.path }}，描述：{{ result.message }}），
+        调用可用的 MCP Server（如 GitHub API / CodeQL toolbox）收集信息：
+        - 告警的 source（来源点）与 sink（汇点）在该 TypeScript/JavaScript 文件中的精确行号；
+        - 告警路径上是否有用户输入（不可信数据）流入（如表单入参、URL 参数、请求体、localStorage）；
+        - 该代码路径是否在特权/高权限上下文（如管理员、凭证处理、服务端处理）中执行；
+        - 该告警触发的输入是否真的可被外部攻击者控制。
+        输出请使用 JSON，并严格给出"文件名:行号"引用，不得编造。
+
+  # ---------------------------------------------------------------------------
+  # 2) 审计：剔除误报（攻击者能否触发？是否特权上下文？）
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      user_prompt: |
+        针对告警 {{ result.alert_number }}（规则：{{ result.rule }}，文件：{{ result.path }}），
+        基于上一步收集的信息，判定该告警是否为真实漏洞（而非误报）：
+        - 若攻击者无法触发该代码路径，或输入不可控，则标记为误报(FP)；
+        - 若在特权上下文执行且输入可控，则视为潜在漏洞(TP)。
+        对每个判定给出 2-3 条简短理由。
+
+  # ---------------------------------------------------------------------------
+  # 3) 生成漏洞报告（带精确文件+行号引用）
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      user_prompt: |
+        针对告警 {{ result.alert_number }}（规则：{{ result.rule }}，文件：{{ result.path }}），
+        仅对判定为 TP 的告警生成漏洞报告。报告必须包含：
+        - 漏洞类型、严重程度；
+        - 精确的 source 与 sink 位置（文件+行号）；
+        - 攻击路径描述；
+        - 修复建议。
+        若全部为误报，则输出 "NO_VULNERABILITY"。
+
+        仅当判定为真实漏洞(TP)并生成了报告时，请调用 memcache_set_state 把报告
+        存入 memcache，key 为 "{{ globals.repo }}_{{ result.alert_number }}"、value 为
+        完整报告正文（供第 5 步创建 Issue 时读取复用）。若为误报(未生成报告)，
+        则不要写入任何 memcache 条目。
+
+  # ---------------------------------------------------------------------------
+  # 4) 校验：报告不完整/不一致=幻觉，直接驳回
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      user_prompt: |
+        针对告警 {{ result.alert_number }}（规则：{{ result.rule }}，文件：{{ result.path }}），
+        校验上一步生成的漏洞报告：
+        - 报告中的文件/行号是否与告警上下文一致？
+        - 是否缺少关键字段（漏洞类型/位置/攻击路径）？
+        - 若信息缺失或不一致，判定为幻觉并驳回（输出 REJECTED）。
+        通过后输出 APPROVED。
+
+  # ---------------------------------------------------------------------------
+  # 5) 创建真实 Issue：仅对校验通过（APPROVED）的真实漏洞创建 GitHub Issue。
+  #    改为 agent 任务（agents: + user_prompt）：{{ result.xxx }} 这类占位符只能在
+  #    agent 的 user_prompt 模板里渲染，run:（纯 shell）不会替换模板，会把模板原文
+  #    原样 POST 出去（旧实现即此 bug，曾生成一堆字面量占位符垃圾 Issue）。
+  #    本步由 agent 读取第 3 步存入 memcache 的报告，校验非空/非占位符后，
+  #    调用 GitHub MCP（github_official，repos/issues 工具集）创建真实 Issue。
+  #    ⚠️ 本步会真实创建 Issue，请在确认链路无误后开启；如需仅输出不改仓库，可注释本步。
+  #    需要 GH_TOKEN（PAT，含 repo / issues 写权限），否则 github_official 工具不可用。
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过（不消费 outputs.alerts 的迭代，也避免空迭代噪音）
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      toolboxes:
+        - seclab_taskflow_agent.toolboxes.github_official
+        - seclab_taskflow_agent.toolboxes.memcache
+      env:
+        GITHUB_MCP_TOOLSETS: repos,issues
+      user_prompt: |
+        针对 CodeQL 告警 {{ result.alert_number }}（规则：{{ result.rule }}，文件：{{ result.path }}），
+        只有当它是经校验的真实漏洞时才创建 GitHub Issue。请严格按以下步骤执行：
+
+        1. 读取报告：调用 memcache_get_state，key 为 "{{ globals.repo }}_{{ result.alert_number }}"，
+           取得第 3 步为该告警生成的漏洞报告。
+        2. 前置校验，任一不满足则直接跳过（不做任何创建，仅输出 SKIP）：
+           - 报告不存在或为空（说明该告警被判定为误报 / 未生成报告）；
+           - alert_number、rule、path 任一为空；
+           - 待创建的标题/正文中仍含未渲染的占位符 "{{"（说明模板未被替换，
+             禁止创建以免再次生成垃圾 Issue）。
+        3. 防重复：先调用 GitHub MCP 工具（issues 工具集）检查仓库 {{ globals.repo }} 中是否
+           已存在标题完全相同的 open Issue；若已存在，则跳过（仅输出 SKIP）。
+        4. 通过 GitHub MCP 的 issues.create 工具（github_official toolbox，issues 工具集）
+           在仓库 {{ globals.repo }} 创建 Issue，禁止直接调用 HTTP API / curl：
+           - 通过 GitHub MCP 工具接口调用，而不是直接发起 HTTP 请求；
+           - 标题："[AI审计] {{ result.rule }} - {{ result.path }}"
+           - 正文（Markdown）如下，报告内容取自步骤 1 读取的漏洞报告：
+             ## 漏洞概述
+             {报告全文}
+
+             ## 关联 CodeQL 告警
+             - 告警编号：{{ result.alert_number }}
+             - 规则：{{ result.rule }}
+             - 文件：{{ result.path }}
+
+             ## 修复建议
+             - 请参考上方报告中给出的修复建议，在对应文件中修复后关闭本 Issue。
+           - 标签：["bug", "security", "ai-audit"]
+        5. 创建成功后输出 CREATED，并记录创建好的 Issue 编号，便于第 6 步知识回流追踪。
+
+  # ---------------------------------------------------------------------------
+  # 6) 知识回流：人工驳回原因回流给 LLM，持续改进
+  # ---------------------------------------------------------------------------
+  - task:
+      must_complete: true
+      # 无 open 告警时跳过
+      if: "outputs.alerts | length > 0"
+      repeat_prompt: true
+      over: "outputs.alerts"
+      agents:
+        - ai_audit.personalities.ts_auditer
+      user_prompt: |
+        针对告警 {{ result.alert_number }}（规则：{{ result.rule }}，文件：{{ result.path }}），
+        将人工审查时产生的"驳回原因/误报标签"记录到本地知识文件，供后续
+        同类告警的审计参考，形成持续改进闭环。若已在第 5 步创建 Issue，请记录
+        Issue 编号，便于后续追踪。
