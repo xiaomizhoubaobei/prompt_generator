@@ -29,17 +29,22 @@ LLM + Taskflow Agent 逐个审计
   ├─ ② 审计：剔除误报（攻击者能否触发？是否特权上下文？）
   ├─ ③ 生成漏洞报告（带精确文件+行号引用）
   ├─ ④ 校验：报告不完整/不一致=幻觉，直接驳回
-  ├─ ⑤ 创建真实 Issue：仅对真实漏洞自动创建 GitHub Issue（自动去重）
-  └─ ⑥ 知识回流：人工驳回原因回流给 LLM，持续改进
+  └─ ⑤ 创建真实 Issue：仅对**校验通过(APPROVED)**的真实漏洞自动创建 Issue
 ```
 
-本目录的 `alert_triage_example.yaml` 即对应上面的 6 阶段流程。
+本目录的 `alert_triage_example.yaml` 即对应上面的 5 阶段流程（外加第 0 步拉取告警）。
+
+> 阶段间数据贯通：各审计阶段通过 memcache 以 `alert_number` 为 key 传递上一步结果
+> （`_evidence` 取证、`_triage` 判定、`_report` 报告、`_verdict` 校验结论），
+> 第 ⑤ 步只会在读到 `_verdict.status == APPROVED` 且 `_report` 存在时才创建 Issue，
+> 从机制上杜绝"被驳回的误报仍被创建"。
+> 原「⑥ 知识回流」因无法在创建 Issue 后立即获得人工反馈而被移除（见文末"为什么没有知识回流"）。
 
 > ⚠️ 第 ⑤ 步会**真实创建 Issue**。若你只想看分流结果、不修改仓库，
 > 请把 `alert_triage_example.yaml` 中第 ⑤ 步「创建真实 Issue」任务整体注释掉。
 
 > 💡 **无告警自动跳过**：当仓库当前**没有 open 的 CodeQL 告警**时，
-> `alerts` 任务（第 0 步）拉取到的列表为空，后续 6 个 `repeat_prompt` 任务
+> `alerts` 任务（第 0 步）拉取到的列表为空，后续 5 个 `repeat_prompt` 任务
 > 都加了 `if: "outputs.alerts | length > 0"` 条件，会被**整体跳过**（记录为
 > skipped），不再像旧版那样对空迭代反复输出 `repeat_prompt iterable is empty!`
 > 噪音，也不会有任何 LLM / Issue 副作用。有告警时行为完全不变。
@@ -52,7 +57,7 @@ LLM + Taskflow Agent 逐个审计
 ai-audit/
 ├── README.md                        # 本说明
 ├── __init__.py                      # 使 ai_audit 成为可导入 Python 包（框架 importlib.resources 必需）
-├── alert_triage_example.yaml        # 6 阶段 AI 审计 taskflow（官方 GRAMMAR 语法）
+├── alert_triage_example.yaml        # 5 阶段 AI 审计 taskflow（官方 GRAMMAR 语法）
 ├── model_config.yaml                # OpenAI 兼容上游模型配置（模型名 + api_type: chat_completions）
 ├── model_config.py                  # [参考] model_config.yaml 的说明文档（框架不读取）
 └── personalities/
@@ -131,8 +136,10 @@ cp -r <本项目>/ai-audit ai_audit
    > 纯 shell 任务不会替换模板（旧实现因此曾把模板原文 POST 出去生成垃圾 Issue）。
    > 需要导出 `GH_TOKEN`（PAT，含 `repo/issues` 写权限）供该 MCP 授权；默认创建到
    > `globals.repo`（可在文件顶部 `globals:` 修改或命令行 `-g repo=owner/repo` 覆盖）。
-   > 第 ③ 步会把判定为真实漏洞(TP)的报告存入 memcache（key `{{ globals.repo }}_{{ result.alert_number }}`），
-   > 第 ⑤ 步读取该报告并校验非空/非占位符后再创建，从根上避免再发占位符垃圾。
+   > 各审计阶段经 memcache 按告警贯通：第 ① 步写取证 `_evidence`，第 ② 步写判定 `_triage`，
+   > 第 ③ 步对 TP 写报告 `_report`，第 ④ 步写校验结论 `_verdict`（APPROVED/REJECTED）。
+   > 第 ⑤ 步读取 `_verdict` 与 `_report`，**仅当 status==APPROVED 且报告非空/非占位符**时才创建，
+   > 从机制上保证被驳回(REJECTED)/误报(FP)不会生成 Issue。
    > 同时，`ts_auditer.yaml` personality 的 `toolboxes` 也已加入
    > `seclab_taskflow_agent.toolboxes.github_official`，确保 agent 在审计/创建 Issue 全程
    > 均通过 **GitHub MCP**（而非直接 HTTP API / curl）与 GitHub 交互，创建 Issue 时
@@ -206,7 +213,8 @@ hatch run main -t ai_audit.alert_triage_example \
 1. 示例开头 `alerts` 任务已改为从 GitHub Code Scanning API 拉取**最新 CodeQL 告警**
    （`state=open&tool_name=CodeQL`），并映射成下游需要的
    `alert_number / rule / path / message` 结构，无需手动维护告警列表。
-2. 观察 6 个阶段输出是否符合预期，重点看**校验阶段**是否把不完整的报告驳回。
+2. 观察各阶段输出是否符合预期，重点看**校验阶段（第 ④ 步）**是否把不完整报告驳回并写入
+   `_verdict.status == REJECTED`，以及第 ⑤ 步是否仅对 APPROVED 创建 Issue。
 3. 确认无误后开启第 ⑤ 步（若已在任务流中启用），即可对真实漏洞自动创建 Issue。
 
 ---
@@ -214,10 +222,26 @@ hatch run main -t ai_audit.alert_triage_example \
 ## 六、本示例的特点
 
 - **针对 TypeScript / JavaScript**：适配本仓库 `src/**` 的 TypeScript/React 代码审计场景。
-- **6 阶段闭环**：信息收集 → 审计 → 报告 → 校验 → 创建真实 Issue → 知识回流。
-- **防幻觉校验**：报告不完整/不一致直接驳回，避免 LLM 编造漏洞。
-- **真实 Issue 创建**：仅对判定为真实漏洞的告警自动创建 GitHub Issue（标题带 `[AI审计]` 前缀，
-  并打 `bug`/`security`/`ai-audit` 标签），自动去重避免重复创建。
+- **5 阶段审计链 + 数据贯通**：信息收集 → 审计 → 报告 → 校验 → 创建真实 Issue。
+  各阶段经 memcache 按告警传递 `_evidence/_triage/_report/_verdict`，下游始终基于上游结论判定，
+  而非各自只看原始告警（修复 Review 指出的"阶段间结果被丢弃"问题）。
+- **分页拉取**：`alerts` 任务逐页拉取全部 open 的 CodeQL 告警，仓库告警超过 100 条也不会漏审。
+- **防幻觉校验**：报告不完整/不一致直接驳回（`_verdict=REJECTED`），避免 LLM 编造漏洞。
+- **真实 Issue 创建**：仅对 `_verdict.status == APPROVED` 的告警创建 GitHub Issue
+  （标题带 `[AI审计]` 前缀，并打 `bug`/`security`/`ai-audit` 标签），自动去重避免重复创建，
+  被驳回/误报不会落 Issue。
+
+---
+
+## 七、为什么移除了"知识回流"这一阶段
+
+原第 ⑥ 步"把人工驳回原因回流给 LLM"紧跟创建 Issue 之后运行，但此刻**人类评审尚未介入**，
+既读不到真实驳回原因、也没有持久化落点，只能产出一个孤立回复，并不能形成所宣称的学习闭环。
+
+人工反馈（对 Issue 打"误报/已修复"标签、关闭原因、评论）属于**事后事件**，应由独立的事件驱动
+工作流（如监听 `issues` 的 `labeled`/`closed` 事件）在 Issue 被人工处理后异步摄入并持久化，
+供下一次审计前载入知识库。若你需要该能力，请另建反馈工作流，并在示例开头把其产物引用进 `globals`/
+模型上下文，而不是在本例的自动分流内即时回收。
 
 ---
 

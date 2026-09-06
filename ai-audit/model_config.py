@@ -47,7 +47,7 @@ ENDPOINT_ENV = "AI_API_ENDPOINT"
 TOKEN_ENV = "AI_API_TOKEN"
 
 
-def get_model_config():
+def getModelConfig():
     """返回框架可识别的模型配置结构。
 
     端点（endpoint）与密钥（token）均以"环境变量名"形式声明，

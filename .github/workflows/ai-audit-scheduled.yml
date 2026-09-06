@@ -6,14 +6,15 @@
 #       新安全告警，做 AI 自动分流。
 #
 # 触发设计：
-#   - workflow_run：监听 codeql.yml（name: "代码质量分析"）的 completed 事件，
-#     在 CodeQL 完成后确定性地触发，保证 AI 审计一定在 CodeQL 扫完后消费
-#     最新告警，替代原先靠 cron「时间差」假设 CodeQL 已完成的不可靠方式。
+#   - workflow_run：监听 codeql.yml（name: "代码质量分析"）的 completed 事件。
+#     为保证 CodeQL 成功后消费最新告警（而非失败/被取消的过期扫描状态），job 级
+#     增加 conclusion == 'success' 门禁（见 jobs.ai-audit.if）。
 #   - workflow_dispatch：保留手动触发，方便首次部署时验证链路。
 #
-# ⚠️ 注意：workflow_run 事件中 GITHUB_TOKEN 为只读权限，但本示例读取告警
-#         （security_events）与创建 Issue（repo/issues 写权限）均走 GH_PAT，
-#         因此权限不受影响。
+# 最小权限：workflow_run 会触发可携仓库凭据并创建 Issue 的自动化路径，因此本工作流
+#   把顶层 GITHUB_TOKEN 收紧到 contents: read；读取告警与创建 Issue 一律走 GH_PAT，
+#   且 GH_PAT 只在真正运行审计的唯一步骤（step 级 env）注入，不在 job 级暴露。
+#   读取 CodeQL 告警的 GITHUB_TOKEN 权限为只读，不授予写能力。
 #
 # 所需 Secrets（仓库 Settings → Secrets and variables → Actions）：
 #   - AI_API_ENDPOINT 必填，上游 base_url（OpenAI 兼容口，如 https://api.deepseek.com/v1）
@@ -44,38 +45,45 @@ on:
   workflow_dispatch:  # 保留手动触发，便于首次部署时验证链路
 
 permissions:
+  # 最小权限：本工作流读取代码/告警与创建 Issue 均走 GH_PAT（见下），
+  # 顶层 GITHUB_TOKEN 仅需只读 contents。禁止授予 security-events/issues 写权限，
+  # 以免 job 内第三方/外部代码在缺省令牌的写能力下被利用。
   contents: read
-  security-events: write   # 读取 CodeQL 告警
-  issues: write            # 若后续要自动创建 Issue
 
 jobs:
   ai-audit:
     name: Run AI Audit Taskflow
     runs-on: ubuntu-latest
-    env:
-      # LLM 配置（OpenAI 兼容上游：国产厂商 / 本地 vLLM 的 OpenAI 兼容口）
-      # 端点如 https://api.deepseek.com/v1，密钥为对应厂商的 API Key
-      AI_API_ENDPOINT: ${{ secrets.AI_API_ENDPOINT }}
-      AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
-      # GitHub PAT：读取 CodeQL 告警 + 创建真实 Issue
-      # 需含 security_events 读权限 + repo/issues 写权限
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      # MCP Server（GitHub API）配置
-      MCP_CONFIG: ${{ secrets.MCP_CONFIG }}
+    # 门禁：仅在「手动触发」或「上游 CodeQL 工作流成功完成」时才运行 AI 审计，
+    # 避免 CodeQL 失败/被取消（同样会触发 workflow_run.completed）时仍拿着
+    # 高权限令牌去消费旧告警、浪费模型配额甚至基于过期扫描状态误建 Issue。
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success')
 
     steps:
+      # 只读出站加固运行器（audit 模式：记录所有出站调用，便于事后审计）
       - name: 加固运行器（审计所有出站调用）
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
+      # 拉取本项目源码（含 ai-audit 示例）
+      # ⚠️ 安全性：第三方 Actions 一律锁定到已复核的不可变 commit SHA，禁用易被
+      #   上游篡改的浮动 tag（如 actions/checkout@v4），并将可执行的外部框架代码
+      #   锁定到复核过的发布 commit，杜绝「上游仓库改默认分支 -> 本工作流执行恶意
+      #   代码」的供应链投毒路径。后续升级需走正式依赖评审，而非直接改浮动 tag。
       - name: Checkout 本项目（含 ai-audit 示例）
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Checkout seclab-taskflow-agent 框架
-        uses: actions/checkout@v4
+      # 拉取 seclab-taskflow-agent 框架，固定到已复核发布的不可变 commit SHA
+      - name: Checkout seclab-taskflow-agent 框架（固定 commit）
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: GitHubSecurityLab/seclab-taskflow-agent
+          # 固定到复核过的 v0.5.0 发布 commit，而非浮动默认分支
+          ref: 6038bb4ee9661887a09215eac70fccceb396cd02 # v0.5.0
           path: seclab-taskflow-agent
 
       - name: 把 ai-audit 复制进框架根目录 ai_audit（目录名用下划线）
@@ -88,17 +96,28 @@ jobs:
         run: |
           cp -r ai-audit seclab-taskflow-agent/ai_audit
 
-      - name: 安装 hatch
-        run: pip install hatch
+      # 安装 hatch：锁定版本，避免未加约束的 pip install 拉取到被替换/污染的包
+      - name: 安装 hatch（锁定版本）
+        run: pip install hatch==1.14.0
 
+      # 运行 AI 审计 taskflow（消费最新 CodeQL 告警）
+      # 说明：凭据仅在真正执行审计的唯一 step 注入（step 级 env），不放到 job 级，
+      #       使工作流里其它 step（含复制/安装等）不暴露这些敏感令牌，收敛凭据暴露面。
+      # ⚠️ 已知取舍：本示例为最小演示，审计与「创建真实 Issue」仍在同一 job 内完成；
+      #   生产落地建议按上文 review 意见拆成两段——先在无凭据 job 里产出并校验审计
+      #   报告（credential-free），再在最小权限的发布 job 里用窄域 PAT 创建 Issue。
       - name: 运行 AI 审计 taskflow（消费最新 CodeQL 告警）
         working-directory: seclab-taskflow-agent
         env:
           # alert_triage_example.yaml 的 alerts 任务从 GitHub Code Scanning API
           # 实时拉取最新告警，需 PAT 含 security_events 读权限；
           # 第 5 步「创建真实 Issue」由 agent 通过 github_official（GitHub MCP）创建，
-          # 用 job 级 GH_TOKEN（即 GH_PAT，含 repo/issues 写权限）授权
+          # 用 GH_TOKEN（即 GH_PAT，含 repo/issues 写权限）授权
+          AI_API_ENDPOINT: ${{ secrets.AI_API_ENDPOINT }}
+          AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          MCP_CONFIG: ${{ secrets.MCP_CONFIG }}
           # 默认审计本仓库，如需改为其它仓库可改这里（owner/repo）
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
