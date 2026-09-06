@@ -103,7 +103,7 @@ jobs:
               # 一级标题突出 Issue 标题，正文用列表条目逐项展示
               md_lines.append("### 新 Issue #{}：{}".format(num, title))
               if user:
-                  md_lines.append("- **提交者：** @{}".format(user))
+                  md_lines.append("- **提交者：** {}".format(user))
               if body:
                   # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
                   md_lines.append("- **详情：** {}".format(body))
