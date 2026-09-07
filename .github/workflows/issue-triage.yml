@@ -6,16 +6,13 @@
 #
 # 设计说明（复用已有 AI 审计环境变量）：
 #   参考 https://github.com/xiaomizhoubaobei/LLM-Playground/blob/main/.github/
-#   workflows/issue-triage.yml 的 iFlow CLI 自动分类工作流，将其引入本仓库，
+#   workflows/issue-triage.yml 的分类工作流，将其引入本仓库，
 #   **不新增任何独立密钥**，直接复用本仓库已在 .github/workflows/
 #   ai-audit-scheduled.yml 中落地并配置好的「AI 审计」环境变量作为分类所用
 #   大模型的接入配置：
 #     - AI_API_ENDPOINT  上游 base_url（OpenAI 兼容口，如 https://api.deepseek.com/v1）
 #     - AI_API_TOKEN     对应厂商 API Key
 #     - AI_MODEL_NAME    实际调用模型名（如 deepseek-v4-flash / qwen-max / kimi-k2）
-#   上述三项在 iflow-cli-action 的 base_url / model / api_key 三个入参上透传，
-#   使 iFlow CLI 编排的 gh 打标代理对接既有 AI 审计模型，免新增 IFLOW_API_KEY
-#   等独立凭据，也无需改代码即可通过仓库 Secret 切换分类模型。
 #
 # 触发设计：
 #   - issues: opened / reopened：新 Issue 或重开的 Issue 自动分类。
@@ -23,18 +20,27 @@
 #     含「@iflow-cli /triage」才触发，避免任意外部用户借机消耗模型配额。
 #   - workflow_dispatch：保留手动触发，便于首次部署时验证链路与指定 issue_number。
 #
-# 安全与最小权限：
-#   - 分类与打标由 iflow-cli-action 内的 gh CLI 借助 GITHUB_TOKEN 完成，故顶层
-#     issues/statuses 授予写权限；contents 仅只读（拉取仓库做分类分析）。
-#   - AI 审计三件套（API 端点/令牌/模型名）仅在真正执行分类的唯一 step 的
-#     with 入参中注入，不额外声明为顶层/作业环境变量，收敛凭据暴露面。
+# 安全与最小权限（依据 superagent-security 评审意见整改，拆分为两阶段）：
+#   - 阶段一「AI 纯分类」：由 python3 + 标准库 urllib 直接调用 OpenAI 兼容
+#     chat/completions 分类接口。该 step **不注入任何 GITHUB_TOKEN / 写凭据**，
+#     也不让 AI 执行 shell 或 gh 命令，AI 仅据白名单输出建议标签，故不可信 issue
+#     文本即便含提示注入也只能影响「建议了哪些标签」，无法触发任何仓库写操作。
+#     AI 审计三件套（端点/令牌/模型名）仅在真正执行分类的这一 step 以 env 注入，
+#     不额外声明为顶层/作业环境变量，收敛凭据暴露面。
+#   - 阶段二「确定性打标」：普通 bash 读取分类结果，先与内嵌「标签白名单」逐项
+#     精确比对，再与仓库 `gh label list` 实际标签集合比对；仅对同时命中白名单与
+#     仓库的标签，按清单固定颜色（常量，不受 AI 输出影响）确定性创建/应用。bash
+#     打标逻辑不解析不可信文本里的任何指令，只遍历白名单做布尔匹配，杜绝字符串
+#     注入，故可安全持有 issues: write 的最小写权限。
+#   - 顶层权限仅 contents: read；issues: write 收敛到 triage job 级（打标所需）；
+#     移除工作流未用到的 statuses 写权限。
 #   - 第三方 Actions 一律锁定到已复核的不可变 commit SHA，禁用浮动 tag。
 #
 # 所需 Secrets（仓库 Settings → Secrets and variables → Actions）：
 #   - AI_API_ENDPOINT 必填，同 AI 审计，OpenAI 兼容 base_url
 #   - AI_API_TOKEN    必填，同 AI 审计，模型厂商 API Key
 #   - AI_MODEL_NAME   必填，同 AI 审计，分类所用模型名
-#   （无需 IFLOW_API_KEY；GITHUB_TOKEN 由 Actions 自动注入）
+#   （无需 IFLOW_API_KEY；GITHUB_TOKEN 由 Actions 自动注入，仅阶段二打标使用）
 # =============================================================================
 
 name: '🏷️ Issue 自动分类（复用 AI 审计模型）'
@@ -62,12 +68,10 @@ defaults:
   run:
     shell: 'bash'
 
+# 顶层仅授予只读 contents（检出仓库供分类提示词分析使用）；打标所需的 issues
+# 写权限收敛到下方 triage job 级，避免第三方/被注入步骤在缺省令牌写能力下被利用。
 permissions:
-  # 打标由 iflow-cli-action 内的 gh CLI 借助 GITHUB_TOKEN 完成，故 issues/statuses
-  # 需要写权限；contents 仅需只读（拉取仓库做分类提示词分析），不授予多余能力。
   contents: 'read'
-  issues: 'write'
-  statuses: 'write'
 
 jobs:
   triage-issue:
@@ -82,6 +86,10 @@ jobs:
         )
       )
     runs-on: 'ubuntu-latest'
+    # 本 job 才需要 issues 写权限（仅阶段二确定性打标使用 gh 时授予）。
+    permissions:
+      contents: 'read'
+      issues: 'write'
     steps:
       # 加固运行器（audit 模式：记录所有出站调用，便于事后审计）
       - name: 加固运行器（审计所有出站调用）
@@ -92,126 +100,202 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # 运行 iFlow CLI Issue 分类
-      # 复用 AI 审计环境变量：AI_API_ENDPOINT / AI_API_TOKEN / AI_MODEL_NAME 分别
-      # 作为 base_url / api_key / model 透传给 iFlow CLI，使其对接既有 AI 审计模型。
-      - name: '运行 iFlow CLI Issue 分类（复用 AI 审计模型）'
-        id: 'iflow_cli_issue_triage'
-        uses: iflow-ai/iflow-cli-action@66bf336db117b4a06147af2901a34dc802bbd236 # v2.2.1
+      # -------------------------------------------------------------------------
+      # 阶段一：AI 纯分类（python3 + urllib 直连 OpenAI 兼容接口，仅做推理）
+      #   · 不注入 GITHUB_TOKEN，不给任何 agent 执行 shell/gh 的能力；
+      #   · AI 审计凭据仅在本 step 注入；issue 标题/正文仅作为只读文本送入，
+      #     即便被提示注入也只能左右「建议标签」，无法触发仓库写操作；
+      #   · 结果只保留命中白名单的标签名，写入共享临时文件供阶段二使用。
+      # -------------------------------------------------------------------------
+      - name: 'AI 分类 Issue（仅推理，不持有写凭据）'
+        id: 'ai_triage'
         env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          AI_API_ENDPOINT: '${{ secrets.AI_API_ENDPOINT }}'
+          AI_API_TOKEN: '${{ secrets.AI_API_TOKEN }}'
+          AI_MODEL_NAME: '${{ secrets.AI_MODEL_NAME }}'
           ISSUE_TITLE: '${{ github.event.issue.title }}'
           ISSUE_BODY: '${{ github.event.issue.body }}'
           ISSUE_NUMBER: '${{ github.event.issue.number }}'
           REPOSITORY: '${{ github.repository }}'
-        with:
-          # 复用 AI 审计大模型：令牌 / 端点 / 模型名均来自既有 AI 审计 Secrets
-          api_key: ${{ secrets.AI_API_TOKEN }}
-          base_url: ${{ secrets.AI_API_ENDPOINT }}
-          model: ${{ secrets.AI_MODEL_NAME }}
-          timeout: '3600'
-          debug: 'true'
-          prompt: |
-            ## 角色
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
 
-            你是一个 issue 分类助手，服务于本仓库「prompt_generator」——
-            一个基于 TypeScript/React（302.AI 开源）的「AI 提示词专家」前端。
-            它会将简单提示语改写为 CO-STAR、CRISPE、QStar(Q*)、变分法、Meta
-            Prompting、CoT 思维链、微软优化法、RISE、DRAW(AI 绘画) 等结构的高
-            质量提示词，支持在线修改与测试、多语言（中文/English/日本語）切换。
-            你的任务：分析当前 issue 主题，从下方的「标签清单」里挑出最贴切的若干
-            标签打上去。清单基于本项目源码（src/、.github/workflows/、Dockerfile
-            等）归纳，标签名与颜色务必严格按下表执行，保证跨 issue 打标一致。
+          # 标签白名单常量（名称→颜色）。此清单为权威来源，供下方 AI 提示与阶段二
+          # bash 校验共用，保证标签名与颜色硬编码、稳定、跨 issue 打标一致，且不
+          # 允许 AI 自创标签或颜色。
+          LABELS = [
+              {"name": "bug", "color": "#d73a4a"},
+              {"name": "enhancement", "color": "#a2eeef"},
+              {"name": "feature", "color": "#1d76db"},
+              {"name": "documentation", "color": "#0075ca"},
+              {"name": "security", "color": "#b60205"},
+              {"name": "question", "color": "#d876e3"},
+              {"name": "good first issue", "color": "#1f883d"},
+              {"name": "help wanted", "color": "#6f42c1"},
+              {"name": "duplicate", "color": "#cfd3d7"},
+              {"name": "invalid", "color": "#ffffff"},
+              {"name": "wontfix", "color": "#6e5494"},
+              {"name": "prompt", "color": "#008672"},
+              {"name": "framework", "color": "#fbca04"},
+              {"name": "custom", "color": "#7e4aff"},
+              {"name": "ui", "color": "#7057ff"},
+              {"name": "models", "color": "#5319e7"},
+              {"name": "config", "color": "#e4e669"},
+              {"name": "i18n", "color": "#1d76db"},
+              {"name": "agent", "color": "#d35400"},
+              {"name": "ai-audit", "color": "#ededed"},
+              {"name": "docker", "color": "#0969da"},
+              {"name": "deploy", "color": "#0f7fb8"},
+              {"name": "ci", "color": "#8250df"},
+              {"name": "license", "color": "#bfd4f2"},
+              {"name": "supply-chain", "color": "#168700"},
+              {"name": "code-scanning", "color": "#e99695"},
+              {"name": "p0", "color": "#b60205"},
+              {"name": "p1", "color": "#d93f0b"},
+              {"name": "p2", "color": "#fbca04"},
+              {"name": "p3", "color": "#0e8a16"},
+          ]
+          label_names = [x["name"] for x in LABELS]
+          whitelist = set(label_names)
 
-            ## 标签清单（标签名与颜色均为固定值，勿自行改色）
+          def build_system_prompt():
+              return (
+                  "你是一个 issue 分类助手，服务于仓库「prompt_generator」——一个基于 "
+                  "TypeScript/React（302.AI 开源）的「AI 提示词专家」前端。它会将简单提示语 "
+                  "改写为 CO-STAR、CRISPE、QStar(Q*)、变分法、Meta Prompting、CoT 思维链、"
+                  "微软优化法、RISE、DRAW(AI 绘画) 等结构的高质量提示词，支持在线修改与测试、"
+                  "多语言（中文/English/日本語）切换。\n\n"
+                  "你的任务：仅基于下方白名单为当前 issue 选出最贴切的若干标签，然后只输出一个"
+                  " JSON 数组（不要输出任何其它文字、注释、Markdown 代码块或解释）。\n"
+                  "可选标签（务必逐字使用，勿自创、勿改拼写、勿夹带描述或命令）：\n"
+                  + "\n".join("- " + n for n in label_names) +
+                  "\n\n规则：优先按 issue 性质/类型与仓库模块选类型与功能类标签；对确需人工优先"
+                  "介入的 issue 再从优先级标签（p0/p1/p2/p3）中选一条。仅当 issue 确为重复、"
+                  "无效或不采纳时才用 duplicate/invalid/wontfix；正常 issue 不得误打。"
+                  " 输出示例：[\"bug\",\"ui\"]"
+              )
 
-            ### A. 类型标签（按问题性质与生命周期）
-            | 标签 | 颜色 | 适用场景 |
-            | --- | --- | --- |
-            | bug | #d73a4a | 缺陷、报错、行为异常 |
-            | enhancement | #a2eeef | 既有功能的体验/健壮性增强 |
-            | feature | #1d76db | 全新功能、新结构 |
-            | documentation | #0075ca | 文档、README、注释规范 |
-            | security | #b60205 | 安全、凭据泄漏、密钥管理 |
-            | question | #d876e3 | 提问、咨询、用法求助 |
-            | good first issue | #1f883d | 适合新手参与，降低贡献门槛 |
-            | help wanted | #6f42c1 | 期望社区/他人协助解决的问题 |
-            | duplicate | #cfd3d7 | 与既有 issue 重复 |
-            | invalid | #ffffff | 无效：信息不足、与仓库无关、非问题 |
-            | wontfix | #6e5494 | 确认不修复/不采纳（含设计取舍） |
+          # 只读送入的 issue 标题/正文（截断，避免超大正文触发异常/超限）
+          title = (os.environ.get("ISSUE_TITLE", "") or "")[:2000]
+          body = (os.environ.get("ISSUE_BODY", "") or "")[:8000]
 
-            ### B. 功能标签（按项目模块，源自 src/ 结构）
-            | 标签 | 颜色 | 对应模块/场景 |
-            | --- | --- | --- |
-            | prompt | #008672 | 提示词模板与优化逻辑（src/lib/prompt.ts、src/lib/AnalyzeImagesPrompt.ts 等） |
-            | framework | #fbca04 | 提示词框架：CO-STAR、CRISPE、QStar(Q*)、变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW、O1-STYLE、OpenAI、claude、Custom |
-            | custom | #7e4aff | 自定义提示词优化指令（src/App.tsx 编辑提示词优化指令、{input} 占位符） |
-            | ui | #7057ff | 界面与交互（src/components、Header、输入/结果 CodeMirror） |
-            | models | #5319e7 | 模型选择与适配（src/components/ModelSelector.tsx、commonModelList、RadioGroup） |
-            | config | #e4e669 | 配置、密钥、环境变量（.env.*、src/lib/security.ts 加解密、SettingsDialog） |
-            | i18n | #1d76db | 多语言（src/lib/Language.ts：中文/English/日本語，README 三语同步） |
-            | agent | #d35400 | Agent 编排与集成：iFlow CLI、Claude/Codex/Qoder/Gemini、ECC bundle、.cnb.yml install_agents.sh |
-            | ai-audit | #ededed | AI 审计：src/ 与 ai-audit/ 的审计源码、.github/workflows/ai-audit-scheduled.yml、ecc 配置 |
+          user_content = (
+              f"请为以下 GitHub Issue 分类，issue #{os.environ.get('ISSUE_NUMBER', '')}。\n"
+              f"标题：{title}\n正文：\n{body}\n\n只输出 JSON 标签数组。"
+          )
 
-            ### C. 平台/工程标签
-            | 标签 | 颜色 | 适用场景 |
-            | --- | --- | --- |
-            | docker | #0969da | Dockerfile、docker-compose、nginx、容器构建与部署 |
-            | deploy | #0f7fb8 | 部署、发布、上线（CNB 构建产物、镜像分发、站点运维） |
-            | ci | #8250df | 流水线与 CI/CD（.github/workflows、.cnb.yml、手动分包 vite 构建） |
-            | license | #bfd4f2 | 许可证合规：LICENSE、文件头 @LICENSE、版权/作者归属标识 |
-            | supply-chain | #168700 | 供应链与依赖安全：SBOM、Scorecard、dependency-review、dependabot |
-            | code-scanning | #e99695 | 代码与配置扫描：CodeQL、njsscan、secret-scanning、inclusiveness-analyzer、check-signed-commits |
+          endpoint = os.environ["AI_API_ENDPOINT"].rstrip("/")
+          payload = {
+              "model": os.environ["AI_MODEL_NAME"],
+              "messages": [
+                  {"role": "system", "content": build_system_prompt()},
+                  {"role": "user", "content": user_content},
+              ],
+              "temperature": 0,
+          }
+          req = urllib.request.Request(
+              endpoint + "/chat/completions",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + os.environ["AI_API_TOKEN"],
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=180) as resp:
+              data = json.loads(resp.read().decode("utf-8"))
+          content = data["choices"][0]["message"]["content"]
 
-            ### D. 优先级标签（issue 需人工介入的紧急程度）
-            | 标签 | 颜色 | 含义 |
-            | --- | --- | --- |
-            | p0 | #b60205 | 紧急：阻塞或安全相关，须立即处理 |
-            | p1 | #d93f0b | 高优先级，尽快处理 |
-            | p2 | #fbca04 | 中优先级，排期处理 |
-            | p3 | #0e8a16 | 低优先级，可延后 |
+          # 稳健解析：仅取 JSON 数组片段
+          m = re.search(r"\[[^\]]*\]", content, re.S)
+          chosen = []
+          if m:
+              try:
+                  arr = json.loads(m.group(0))
+                  chosen = [str(x) for x in arr]
+              except Exception:
+                  chosen = []
+          # 白名单过滤：仅保留与清单逐字一致的标签，丢弃一切自创/注入字符串
+          chosen = [c for c in chosen if c in whitelist]
+          seen, result = set(), []
+          for c in chosen:
+              if c not in seen:
+                  seen.add(c)
+                  result.append(c)
 
-            ## 步骤
+          # 结果写入共享临时文件，供阶段二确定性打标读取
+          out_path = "/tmp/ai_labels.txt"
+          with open(out_path, "w", encoding="utf-8") as o:
+              o.write("\n".join(result))
+          print("AI 分类完成，命中白名单标签：" + (", ".join(result) if result else "(无)"))
+          PY
 
-            1. 运行：`gh label list --json name,color` 获取所有可用标签。
-            2. 查看环境变量中提供的 issue 标题和正文：
-               "${ISSUE_TITLE}" 和 "${ISSUE_BODY}"。
-            3. 结合上方清单，从 A/B/C 中选出最能覆盖 issue 主题的标签；对明确
-               需要人工优先介入的 issue 再从 D 中挑选一条优先级标签。
+      # -------------------------------------------------------------------------
+      # 阶段二：确定性打标（普通 bash + gh，不解析不可信文本的任何指令）
+      #   遍历白名单常量，仅对「AI 建议 且 命中白名单」的标签，按常量颜色确定性
+      #   创建（如仓库缺失）并应用到 issue；颜色一律取自常量清单，与 AI 输出无关。
+      # -------------------------------------------------------------------------
+      - name: '确定性应用标签到 Issue（白名单校验后打标）'
+        env:
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          REPOSITORY: '${{ github.repository }}'
+        run: |
+          set -euo pipefail
+          # 颜色常量（名称→颜色，仅用于确定性创建缺失标签；值硬编码、与 AI 输出无关）
+          declare -A COLOR=(
+            [bug]="#d73a4a" [enhancement]="#a2eeef" [feature]="#1d76db"
+            [documentation]="#0075ca" [security]="#b60205" [question]="#d876e3"
+            [good first issue]="#1f883d" [help wanted]="#6f42c1" [duplicate]="#cfd3d7"
+            [invalid]="#ffffff" [wontfix]="#6e5494" [prompt]="#008672"
+            [framework]="#fbca04" [custom]="#7e4aff" [ui]="#7057ff" [models]="#5319e7"
+            [config]="#e4e669" [i18n]="#1d76db" [agent]="#d35400" [ai-audit]="#ededed"
+            [docker]="#0969da" [deploy]="#0f7fb8" [ci]="#8250df" [license]="#bfd4f2"
+            [supply-chain]="#168700" [code-scanning]="#e99695"
+            [p0]="#b60205" [p1]="#d93f0b" [p2]="#fbca04" [p3]="#0e8a16"
+          )
+          # 标签白名单（仅这些键会被打标，其余一律忽略）
+          declare -A WHITELIST=(
+            [bug]=1 [enhancement]=1 [feature]=1 [documentation]=1 [security]=1
+            [question]=1 [good first issue]=1 [help wanted]=1 [duplicate]=1
+            [invalid]=1 [wontfix]=1 [prompt]=1 [framework]=1 [custom]=1 [ui]=1
+            [models]=1 [config]=1 [i18n]=1 [agent]=1 [ai-audit]=1 [docker]=1
+            [deploy]=1 [ci]=1 [license]=1 [supply-chain]=1 [code-scanning]=1
+            [p0]=1 [p1]=1 [p2]=1 [p3]=1
+          )
 
-            4. **标签创建检查**（关键步骤）：
-               对每个你计划添加的标签，先确认其是否已在仓库中；若不存在，按下表
-               对应颜色与描述创建，**颜色必须取自上方清单，严禁自创任意颜色**：
-               ```bash
-               gh label create "${LABEL_NAME}" --color "${COLOR}" --description "${DESCRIPTION}"
-               ```
+          # 读取阶段一输出（每一行一个标签名，已由 python 白名单过滤）
+          mapfile -t suggested < /tmp/ai_labels.txt
 
-            5. **应用标签**：
-               使用以下命令将所选标签应用到 issue：
-               ```bash
-               gh issue edit "${ISSUE_NUMBER}" --add-label "${LABEL1},${LABEL2},${LABEL3}"
-               ```
+          # 仓库现存标签集合（用于避免重复创建）
+          repo_labels=$(gh label list --json name --jq '.[].name' 2>/dev/null || true)
 
-            6. **清理状态**：
-               如果存在 "status/needs-triage" 标签，使用以下命令删除：
-               ```bash
-               gh issue edit "${ISSUE_NUMBER}" --remove-label "status/needs-triage"
-               ```
+          apply=()
+          for lbl in "${suggested[@]:-}"; do
+            [ -n "$lbl" ] || continue
+            # 仅接受白名单内的确切标签名（杜绝注入字符串进入 gh 参数）
+            [ -n "${WHITELIST[$lbl]:-}" ] || { echo "跳过白名单外标签: $lbl"; continue; }
+            # 若仓库中尚不存在，按常量颜色确定性创建（颜色不受 AI 输出影响）
+            if ! echo "$repo_labels" | grep -qxF "$lbl"; then
+              echo "确定性创建缺失标签: $lbl (${COLOR[$lbl]})"
+              gh label create "$lbl" --color "${COLOR[$lbl]}" >/dev/null
+            fi
+            apply+=("$lbl")
+          done
 
-            ## 指南
-
-            - **必须**：优先从上方「标签清单」选标签；若需创建缺失标签，颜色严格沿用清单，勿自行发明颜色
-            - **不要**添加评论或修改 issue 内容；**仅分类**当前的 issue
-            - **分配所有适用的标签**（类型 + 功能 + 平台，必要时 + 优先级）
-            - **仅当** issue 确为重复、无效或不采纳时才使用 duplicate / invalid / wontfix，正常 issue 不得误打；good first issue / help wanted 仅在符合语义时使用
-            - **不要**为清单外的自创主题临时造标签；确属清单未覆盖时，可创建新标签但请遵循仓库现有命名与配色习惯
-            - 将所有 shell 变量引用为 "${VAR}"（带引号和花括号）
-            - 创建标签时提供清单对应的颜色与简洁中文描述
+          if [ "${#apply[@]}" -gt 0 ]; then
+            echo "应用标签到 issue #${ISSUE_NUMBER}: ${apply[*]}"
+            label_arg="$(IFS=,; echo "${apply[*]}")"
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --add-label "$label_arg"
+          else
+            echo '无白名单命中的标签可应用（AI 未给出合法建议或本 issue 无需打标）。'
+          fi
 
       # 分类失败时评论，便于维护者定位（引用 action 日志）
       - name: '发布 Issue 分类失败评论'
         if: |-
-          ${{ failure() && steps.iflow_cli_issue_triage.outcome == 'failure' }}
+          ${{ failure() && steps.ai_triage.outcome == 'failure' }}
         uses: 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd' # v7
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
