@@ -89,16 +89,61 @@ jobs:
           # 内容直接灌入钉钉（superagent P1：任意 Issue 作者可控 title/body/user）。
           # 说明：字段经环境变量传入，无 shell 拼接，不构成命令注入；此处主要防
           # 钉钉推送被滥用（内容超长、换行/控制字符混淆）与刷屏。
+          # 先剥控制字符并把首尾/连续空白折叠成单行；截断时尽量在词边界断开并补
+          # 省略号「…」，避免把标题/字段拦腰截断成半截符号或单词。
           def _clean(value, limit):
               if not value:
                   return ''
-              # 剥离控制字符并折叠多段空白，仅保留可见内容
               value = re.sub(r'[\x00-\x1f\x7f]', ' ', value)
               value = re.sub(r'\s+', ' ', value).strip()
-              return value[:limit]
+              if len(value) <= limit:
+                  return value
+              cut = value[:limit]
+              # 仅在存在空白且回退点不算太靠前时才回退到最近空白，防止过度压缩
+              ws = cut.rfind(' ')
+              if ws > 0 and ws >= int(limit * 0.5):
+                  cut = cut[:ws]
+              return cut + '…'
+
+          # 把 Issue 正文（多为 AI 审计生成、含大量 markdown 结构）清洗成「干净的单行
+          # 纯文本预览」：保留可读内容，剥掉标题井号/列表符/表格竖线与分隔行/代码反引号/
+          # 粗斜体星号/行内链接等结构噪声，避免整套 markdown 语法符号被压成一行「符号汤」，
+          # 让钉钉卡片里的「详情」一眼可读。
+          def _plain_preview(value, limit):
+              if not value:
+                  return ''
+              kept = []
+              for line in value.splitlines():
+                  line = re.sub(r'[\x00-\x1f\x7f]', ' ', line)
+                  line = line.strip()
+                  if not line:
+                      continue
+                  # 跳过纯装饰行：水平分隔线(---/***)与表格分隔行(|---|---|/|:--|:--|)
+                  stripped = line.strip('|: -')
+                  if stripped == '' and (line.count('-') > 2 or line.count('*') > 2 or '|' in line):
+                      continue
+                  # 表格数据行剥掉首尾竖线，内部竖线统一转成分隔点「·」
+                  if line.startswith('|') and line.endswith('|'):
+                      line = line.strip('|')
+                  # 去掉行首 markdown 修饰：标题井号、引用、无序/有序列表符
+                  line = re.sub(r'^\s*(#{1,6}\s*|>\s+|[-+*]\s+|\d+[.)]\s+)', '', line)
+                  # 去掉行内链接/图片，保留其显示文字或 alt
+                  line = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', line)
+                  line = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', line)
+                  # 去掉行内代码反引号、粗/斜体星号、下划线强调与行内 HTML 标签
+                  line = re.sub(r'`+', '', line)
+                  line = line.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+                  line = re.sub(r'<[^>]+>', '', line)
+                  # 其余残留竖线（表格单元分隔）替换为分隔点，再折叠空白
+                  line = line.replace('|', ' · ')
+                  line = re.sub(r'\s+', ' ', line).strip(' :')
+                  if line:
+                      kept.append(line)
+              # 各清洗后的行以单空格衔接成一行，再统一做词边界截断
+              return _clean(' '.join(kept), limit)
 
           title = _clean(os.environ.get('ISSUE_TITLE'), 80)
-          body = _clean(os.environ.get('ISSUE_BODY'), 300)
+          body = _plain_preview(os.environ.get('ISSUE_BODY'), 300)
           user = _clean(os.environ.get('ISSUE_USER'), 30)
 
           # 解析 Issue 标签：github.event.issue.labels 是形如
