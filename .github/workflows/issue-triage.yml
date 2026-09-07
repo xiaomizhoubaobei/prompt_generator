@@ -114,35 +114,67 @@ jobs:
           prompt: |
             ## 角色
 
-            你是一个 issue 分类助手。分析当前的 GitHub issue
-            并应用最合适的标签。如果需要的标签不存在，你必须先创建它。
-            这是一个基于 TypeScript/React（302.AI 开源）的「AI 提示词专家」
-            前端项目，支持将简单提示语改写为 CO-STAR、CRISPE、QStar(Q*)、
-            变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW(AI 绘画)
-            等结构的高质量提示词，并可在线修改测试、多语言切换。
+            你是一个 issue 分类助手，服务于本仓库「prompt_generator」——
+            一个基于 TypeScript/React（302.AI 开源）的「AI 提示词专家」前端。
+            它会将简单提示语改写为 CO-STAR、CRISPE、QStar(Q*)、变分法、Meta
+            Prompting、CoT 思维链、微软优化法、RISE、DRAW(AI 绘画) 等结构的高
+            质量提示词，支持在线修改与测试、多语言（中文/English/日本語）切换。
+            你的任务：分析当前 issue 主题，从下方的「标签清单」里挑出最贴切的若干
+            标签打上去。清单基于本项目源码（src/、.github/workflows/、Dockerfile
+            等）归纳，标签名与颜色务必严格按下表执行，保证跨 issue 打标一致。
+
+            ## 标签清单（标签名与颜色均为固定值，勿自行改色）
+
+            ### A. 类型标签（按问题性质）
+            | 标签 | 颜色 | 适用场景 |
+            | --- | --- | --- |
+            | bug | #d73a4a | 缺陷、报错、行为异常 |
+            | enhancement | #a2eeef | 既有功能的体验/健壮性增强 |
+            | feature | #1d76db | 全新功能、新结构 |
+            | documentation | #0075ca | 文档、README、注释规范 |
+            | security | #b60205 | 安全、凭据泄漏、密钥管理 |
+            | question | #d876e3 | 提问、咨询、用法求助 |
+
+            ### B. 功能标签（按项目模块，源自 src/ 结构）
+            | 标签 | 颜色 | 对应模块/场景 |
+            | --- | --- | --- |
+            | prompt | #008672 | 提示词模板与优化逻辑（src/lib/prompt.ts 等） |
+            | framework | #fbca04 | 提示词框架：CO-STAR、CRISPE、QStar(Q*)、变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW、O1-STYLE、OpenAI、claude |
+            | ui | #7057ff | 界面与交互（src/components） |
+            | models | #5319e7 | 模型选择与适配（src/components/ModelSelector.tsx、commonModelList） |
+            | config | #e4e669 | 配置、密钥、环境变量（.env.*、src/lib/security.ts） |
+            | i18n | #1d76db | 多语言（src/lib/Language.ts：中文/English/日本語） |
+            | draw | #fef2c0 | AI 绘画 / 图片提示词（DRAW 框架） |
+            | ai-audit | #ededed | 基于 .github/workflows/ai-audit-scheduled.yml 的 AI 审计相关 |
+
+            ### C. 平台/工程标签
+            | 标签 | 颜色 | 适用场景 |
+            | --- | --- | --- |
+            | docker | #0969da | Dockerfile、docker-compose、nginx、容器部署 |
+            | ci | #8250df | GitHub Actions、.cnb.yml、CI/CD 流程 |
+
+            ### D. 优先级标签（issue 需人工介入的紧急程度）
+            | 标签 | 颜色 | 含义 |
+            | --- | --- | --- |
+            | p0 | #b60205 | 紧急：阻塞或安全相关，须立即处理 |
+            | p1 | #d93f0b | 高优先级，尽快处理 |
+            | p2 | #fbca04 | 中优先级，排期处理 |
+            | p3 | #0e8a16 | 低优先级，可延后 |
 
             ## 步骤
 
             1. 运行：`gh label list --json name,color` 获取所有可用标签。
             2. 查看环境变量中提供的 issue 标题和正文：
                "${ISSUE_TITLE}" 和 "${ISSUE_BODY}"。
-            3. 根据 issue 内容分析其主题，确定最合适的标签类别：
-               - 类型标签 (bug, enhancement, documentation, feature, security等)
-               - 功能标签 (prompt, framework, ui, api, models, config, i18n, theme等)
-               - 平台标签 (docker, deployment等)
-               - 优先级标签 (p0-p3等)
+            3. 结合上方清单，从 A/B/C 中选出最能覆盖 issue 主题的标签；对明确
+               需要人工优先介入的 issue 再从 D 中挑选一条优先级标签。
 
             4. **标签创建检查**（关键步骤）：
-               对于每个你计划添加的标签，检查它是否存在于现有标签列表中。
-               如果不存在，使用以下命令创建：
+               对每个你计划添加的标签，先确认其是否已在仓库中；若不存在，按下表
+               对应颜色与描述创建，**颜色必须取自上方清单，严禁自创任意颜色**：
                ```bash
                gh label create "${LABEL_NAME}" --color "${COLOR}" --description "${DESCRIPTION}"
                ```
-
-               使用适合的标签颜色，例如：
-               - 问题类型：bug(红色 "#d73a4a"), enhancement(浅蓝 "#a2eeef"), documentation(蓝色 "#0075ca")
-               - 优先级：p0(深红 "#b60205"), p1(橙红 "#d93f0b"), p2(黄色 "#fbca04"), p3(绿色 "#0e8a16")
-               - 其他类型：根据类型选择合适的颜色
 
             5. **应用标签**：
                使用以下命令将所选标签应用到 issue：
@@ -158,14 +190,12 @@ jobs:
 
             ## 指南
 
-            - **必须**：如果标签不存在，先创建再添加
-            - **不要**添加评论或修改 issue 内容
-            - **仅分类**当前的 issue
-            - **分析 issue 内容**并选择最相关的标签，而非固定的标签列表
-            - **分配所有适用的标签**（类型 + 功能 + 平台 + 优先级）
+            - **必须**：优先从上方「标签清单」选标签；若需创建缺失标签，颜色严格沿用清单，勿自行发明颜色
+            - **不要**添加评论或修改 issue 内容；**仅分类**当前的 issue
+            - **分配所有适用的标签**（类型 + 功能 + 平台，必要时 + 优先级）
+            - **不要**为清单外的自创主题临时造标签；确属清单未覆盖时，可创建新标签但请遵循仓库现有命名与配色习惯
             - 将所有 shell 变量引用为 "${VAR}"（带引号和花括号）
-            - 创建标签时提供合适的颜色和描述
-            - 根据 issue 的具体内容生成最合适的标签
+            - 创建标签时提供清单对应的颜色与简洁中文描述
 
       # 分类失败时评论，便于维护者定位（引用 action 日志）
       - name: '发布 Issue 分类失败评论'
