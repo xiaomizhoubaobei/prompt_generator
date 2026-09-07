@@ -1,0 +1,183 @@
+# =============================================================================
+# Issue 自动分类（复用 AI 审计环境变量）
+# =============================================================================
+# 用途：当仓库新建/重开 Issue，或在受信任成员对 Issue 评论「@iflow-cli /triage」
+#       时，自动对 Issue 做智能分类并打上合适的标签，替代人工逐个打标。
+#
+# 设计说明（复用已有 AI 审计环境变量）：
+#   参考 https://github.com/xiaomizhoubaobei/LLM-Playground/blob/main/.github/
+#   workflows/issue-triage.yml 的 iFlow CLI 自动分类工作流，将其引入本仓库，
+#   **不新增任何独立密钥**，直接复用本仓库已在 .github/workflows/
+#   ai-audit-scheduled.yml 中落地并配置好的「AI 审计」环境变量作为分类所用
+#   大模型的接入配置：
+#     - AI_API_ENDPOINT  上游 base_url（OpenAI 兼容口，如 https://api.deepseek.com/v1）
+#     - AI_API_TOKEN     对应厂商 API Key
+#     - AI_MODEL_NAME    实际调用模型名（如 deepseek-v4-flash / qwen-max / kimi-k2）
+#   上述三项在 iflow-cli-action 的 base_url / model / api_key 三个入参上透传，
+#   使 iFlow CLI 编排的 gh 打标代理对接既有 AI 审计模型，免新增 IFLOW_API_KEY
+#   等独立凭据，也无需改代码即可通过仓库 Secret 切换分类模型。
+#
+# 触发设计：
+#   - issues: opened / reopened：新 Issue 或重开的 Issue 自动分类。
+#   - issue_comment: created：仅当受信任成员（OWNER/MEMBER/COLLABORATOR）评论中
+#     含「@iflow-cli /triage」才触发，避免任意外部用户借机消耗模型配额。
+#   - workflow_dispatch：保留手动触发，便于首次部署时验证链路与指定 issue_number。
+#
+# 安全与最小权限：
+#   - 分类与打标由 iflow-cli-action 内的 gh CLI 借助 GITHUB_TOKEN 完成，故顶层
+#     issues/statuses 授予写权限；contents 仅只读（拉取仓库做分类分析）。
+#   - AI 审计三件套（API 端点/令牌/模型名）仅在真正执行分类的唯一 step 的
+#     with 入参中注入，不额外声明为顶层/作业环境变量，收敛凭据暴露面。
+#   - 第三方 Actions 一律锁定到已复核的不可变 commit SHA，禁用浮动 tag。
+#
+# 所需 Secrets（仓库 Settings → Secrets and variables → Actions）：
+#   - AI_API_ENDPOINT 必填，同 AI 审计，OpenAI 兼容 base_url
+#   - AI_API_TOKEN    必填，同 AI 审计，模型厂商 API Key
+#   - AI_MODEL_NAME   必填，同 AI 审计，分类所用模型名
+#   （无需 IFLOW_API_KEY；GITHUB_TOKEN 由 Actions 自动注入）
+# =============================================================================
+
+name: '🏷️ Issue 自动分类（复用 AI 审计模型）'
+
+on:
+  issues:
+    types:
+      - 'opened'
+      - 'reopened'
+  issue_comment:
+    types:
+      - 'created'
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: '要分类的 issue 编号'
+        required: true
+        type: 'number'
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.event.issue.number }}'
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: 'bash'
+
+permissions:
+  # 打标由 iflow-cli-action 内的 gh CLI 借助 GITHUB_TOKEN 完成，故 issues/statuses
+  # 需要写权限；contents 仅需只读（拉取仓库做分类提示词分析），不授予多余能力。
+  contents: 'read'
+  issues: 'write'
+  statuses: 'write'
+
+jobs:
+  triage-issue:
+    if: |-
+      github.event.sender.type != 'Bot' && (
+        github.event_name == 'issues' ||
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '@iflow-cli /triage') &&
+          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+        )
+      )
+    runs-on: 'ubuntu-latest'
+    steps:
+      # 加固运行器（audit 模式：记录所有出站调用，便于事后审计）
+      - name: 加固运行器（审计所有出站调用）
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: 检出仓库
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # 运行 iFlow CLI Issue 分类
+      # 复用 AI 审计环境变量：AI_API_ENDPOINT / AI_API_TOKEN / AI_MODEL_NAME 分别
+      # 作为 base_url / api_key / model 透传给 iFlow CLI，使其对接既有 AI 审计模型。
+      - name: '运行 iFlow CLI Issue 分类（复用 AI 审计模型）'
+        id: 'iflow_cli_issue_triage'
+        uses: iflow-ai/iflow-cli-action@66bf336db117b4a06147af2901a34dc802bbd236 # v2.2.1
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          ISSUE_TITLE: '${{ github.event.issue.title }}'
+          ISSUE_BODY: '${{ github.event.issue.body }}'
+          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          REPOSITORY: '${{ github.repository }}'
+        with:
+          # 复用 AI 审计大模型：令牌 / 端点 / 模型名均来自既有 AI 审计 Secrets
+          api_key: ${{ secrets.AI_API_TOKEN }}
+          base_url: ${{ secrets.AI_API_ENDPOINT }}
+          model: ${{ secrets.AI_MODEL_NAME }}
+          timeout: '3600'
+          debug: 'true'
+          prompt: |
+            ## 角色
+
+            你是一个 issue 分类助手。分析当前的 GitHub issue
+            并应用最合适的标签。如果需要的标签不存在，你必须先创建它。
+            这是一个基于 TypeScript/React（302.AI 开源）的「AI 提示词专家」
+            前端项目，支持将简单提示语改写为 CO-STAR、CRISPE、QStar(Q*)、
+            变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW(AI 绘画)
+            等结构的高质量提示词，并可在线修改测试、多语言切换。
+
+            ## 步骤
+
+            1. 运行：`gh label list --json name,color` 获取所有可用标签。
+            2. 查看环境变量中提供的 issue 标题和正文：
+               "${ISSUE_TITLE}" 和 "${ISSUE_BODY}"。
+            3. 根据 issue 内容分析其主题，确定最合适的标签类别：
+               - 类型标签 (bug, enhancement, documentation, feature, security等)
+               - 功能标签 (prompt, framework, ui, api, models, config, i18n, theme等)
+               - 平台标签 (docker, deployment等)
+               - 优先级标签 (p0-p3等)
+
+            4. **标签创建检查**（关键步骤）：
+               对于每个你计划添加的标签，检查它是否存在于现有标签列表中。
+               如果不存在，使用以下命令创建：
+               ```bash
+               gh label create "${LABEL_NAME}" --color "${COLOR}" --description "${DESCRIPTION}"
+               ```
+
+               使用适合的标签颜色，例如：
+               - 问题类型：bug(红色 "#d73a4a"), enhancement(浅蓝 "#a2eeef"), documentation(蓝色 "#0075ca")
+               - 优先级：p0(深红 "#b60205"), p1(橙红 "#d93f0b"), p2(黄色 "#fbca04"), p3(绿色 "#0e8a16")
+               - 其他类型：根据类型选择合适的颜色
+
+            5. **应用标签**：
+               使用以下命令将所选标签应用到 issue：
+               ```bash
+               gh issue edit "${ISSUE_NUMBER}" --add-label "${LABEL1},${LABEL2},${LABEL3}"
+               ```
+
+            6. **清理状态**：
+               如果存在 "status/needs-triage" 标签，使用以下命令删除：
+               ```bash
+               gh issue edit "${ISSUE_NUMBER}" --remove-label "status/needs-triage"
+               ```
+
+            ## 指南
+
+            - **必须**：如果标签不存在，先创建再添加
+            - **不要**添加评论或修改 issue 内容
+            - **仅分类**当前的 issue
+            - **分析 issue 内容**并选择最相关的标签，而非固定的标签列表
+            - **分配所有适用的标签**（类型 + 功能 + 平台 + 优先级）
+            - 将所有 shell 变量引用为 "${VAR}"（带引号和花括号）
+            - 创建标签时提供合适的颜色和描述
+            - 根据 issue 的具体内容生成最合适的标签
+
+      # 分类失败时评论，便于维护者定位（引用 action 日志）
+      - name: '发布 Issue 分类失败评论'
+        if: |-
+          ${{ failure() && steps.iflow_cli_issue_triage.outcome == 'failure' }}
+        uses: 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd' # v7
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          script: |-
+            github.rest.issues.createComment({
+              owner: '${{ github.repository }}'.split('/')[0],
+              repo: '${{ github.repository }}'.split('/')[1],
+              issue_number: '${{ github.event.issue.number }}',
+              body: 'Issue 自动分类存在问题。请检查 [action 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 了解详情。'
+            })
