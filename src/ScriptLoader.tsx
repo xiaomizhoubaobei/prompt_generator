@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块实现了基于视口宽度的第三方脚本动态加载功能，负责管理应用程序的跟踪脚本加载。
  *          该组件提供了条件加载功能，确保：
  *          - 响应式加载：仅在屏幕宽度大于 768px 时加载脚本

@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark
  * 该组件显示应用的标题，可选显示品牌图标。
  * 支持的功能：
@@ -28,7 +28,7 @@ import { cn } from "../utils";
  * @returns 返回包含标题和可选品牌图标的 JSX 元素
  */
 export default function Header({ language }: { language: 'chinese' | 'english' | 'japanese' }) {
-  const showBrand = false;
+  const showBrand = true;
   return (
     <div className="relative flex justify-center items-center my-8 gap-1">
       {showBrand &&

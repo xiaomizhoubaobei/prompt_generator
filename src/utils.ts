@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了应用程序中常用的工具函数，包括 CSS 类名合并、代码块提取、HTTP 请求封装和错误消息处理。
  *          该模块实现了以下功能：
  *          - cn(): 使用 clsx 和 tailwind-merge 智能合并 CSS 类名，处理 Tailwind CSS 的类名冲突

@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块是 Redux store 的入口文件，负责：
  *          - 配置 Redux store
  *          - 集成全局状态管理 reducer（globalSlice）

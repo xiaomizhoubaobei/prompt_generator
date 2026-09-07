@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了可复用的多行文本输入框组件，特性包括：
  *          - 支持 React ref 转发
  *          - 继承所有原生 textarea HTML 属性

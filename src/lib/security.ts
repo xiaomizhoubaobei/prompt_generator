@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark
  * 该模块提供基于 Web Crypto API 的加密和解密功能，用于保护敏感数据。
  * 使用 AES-GCM 算法，密钥派生自用户提供的密码或固定密钥。

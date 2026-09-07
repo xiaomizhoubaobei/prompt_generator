@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块是 React 应用的入口点，负责：
  *          - 创建 React 根节点并渲染应用
  *          - 配置 Redux 状态管理

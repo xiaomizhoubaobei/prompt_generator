@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了生成图片分析提示词的功能，用于：
  *          - 将上传的图片 URL 转换为 AI 可识别的请求格式
  *          - 生成专业的图片描述提示词，用于 AI 绘画生成

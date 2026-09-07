@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块是 Redux Toolkit slice，管理应用的全局状态：
  *          - language：应用语言设置（中文、英文、日文）
  *

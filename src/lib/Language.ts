@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块定义了应用的多语言配置，包括：
  *          - 语言类型接口定义
  *          - 支持图片生成的 AI 模型列表

@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark
  * 该组件提供了一种可视化的开关切换控件，用于在两种状态之间进行切换。
  * 支持的特性：

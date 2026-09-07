@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了多种提示词优化框架的模板，用于生成结构化的提示词：
  *          - CO-STAR：新加坡Prompt大赛冠军框架（上下文、目标、身份、语气、受众、结果）
  *          - CRISPE：基于LangGPT框架（角色、简介、目标、技能、约束、输出格式、工作流）

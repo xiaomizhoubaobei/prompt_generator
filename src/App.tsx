@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块是应用的核心组件，实现了以下功能：
  *          - 提示词生成：支持多种提示词框架（CO-STAR、CRISPE、DRAW、Meta Prompting 等）
  *          - 提示词优化：基于用户输入生成结构化的提示词

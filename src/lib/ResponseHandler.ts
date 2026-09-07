@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了一个响应处理类，用于统一处理：
  *          - HTTP 状态码（4xx、5xx）
  *          - 业务错误码（负数，如 -10001）

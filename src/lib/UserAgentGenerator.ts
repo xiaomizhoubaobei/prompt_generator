@@ -4,7 +4,7 @@
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
- * @LICENSE AGPL-3.0 license
+ * @LICENSE MPL-2.0 license
  * @remark 本模块提供了一个 User-Agent 生成器类，支持：
  *          - Chrome 浏览器 UA
  *          - Firefox 浏览器 UA

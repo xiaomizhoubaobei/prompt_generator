@@ -101,7 +101,7 @@ jobs:
                   org.opencontainers.image.url=https://github.com/xiaomizhoubaobei/LLM-Playground
                   org.opencontainers.image.documentation=https://github.com/xiaomizhoubaobei/LLM-Playground#readme
                   org.opencontainers.image.description=LLM Playground - 一个用于测试和实验大语言模型的交互式平台
-                  org.opencontainers.image.licenses=AGPL-3.0
+                  org.opencontainers.image.licenses=MPL-2.0
                   org.opencontainers.image.title=LLM Playground
                   org.opencontainers.image.maintainer=祁筱欣
                   org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
