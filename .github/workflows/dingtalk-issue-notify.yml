@@ -128,34 +128,43 @@ jobs:
           user_url = (os.environ.get('ISSUE_USER_URL') or '').strip()
 
           # 解析 Issue 打开时间（github.event.issue.created_at 为 ISO8601 UTC 时间），
-          # 转成可读的「YYYY-MM-DD HH:MM UTC」便于维护者判断该 Issue 的新旧与积压时长。
+          # 转成可读的「YYYY-MM-DD HH:MM:SS.mmm UTC」便于维护者判断该 Issue 的新旧与积压时长，
+          # 时间精度保留到毫秒（github.event.issue.created_at 常为带小数秒的 ISO8601，如 ...123Z）。
           # 解析失败或缺失时置空，仅告警不阻断发送。
           created_at_raw = os.environ.get('ISSUE_CREATED_AT', '').strip()
           created_display = ''
           if created_at_raw:
+              created_iso = created_at_raw
+              # 兼容 Z 时区后缀：转成带偏移的 ISO8601 供 fromisoformat 解析
+              if created_iso.endswith('Z'):
+                  created_iso = created_iso[:-1] + '+00:00'
+              created_dt = None
               try:
-                  # 兼容带/不带小数秒与 Z 时区后缀的常见格式
-                  created_iso = created_at_raw
-                  if created_iso.endswith('Z'):
-                      created_iso = created_iso[:-1] + '+00:00'
-                  # 去除可能的小数秒，datetime.fromisoformat 在部分版本无法解析小数秒
-                  if '.' in created_iso:
-                      # 小数秒在部分 Python 版本 fromisoformat 无法解析，去掉之。
-                      # tail 可能还带着 +00:00 / +0000 这类时区后缀，需保留。
-                      head, _, tail = created_iso.partition('.')
+                  # 优先完整解析（含小数秒），以保留真实毫秒精度
+                  created_dt = datetime.fromisoformat(created_iso)
+              except ValueError:
+                  # 旧版 fromisoformat 无法解析小数秒时降级：去掉小数秒再解析，
+                  # 此时无法拿到真实毫秒，展示时毫秒按 .000 处理。
+                  head, dot, tail = created_iso.partition('.')
+                  if dot:
+                      # tail 可能带着 +00:00 / +0000 时区后缀，需保留
                       tz_idx = tail.find('+')
                       if tz_idx < 0:
                           tz_idx = tail.find('-', 1)
                       tz = tail[tz_idx:] if tz_idx >= 0 else ''
-                      created_iso = head + tz
-                  created_dt = datetime.fromisoformat(created_iso)
+                      created_iso_no = head + tz
+                  else:
+                      created_iso_no = created_iso
+                  try:
+                      created_dt = datetime.fromisoformat(created_iso_no)
+                  except Exception as e:
+                      print("警告：解析 Issue created_at 失败，将不展示时间：{}".format(e))
+              if created_dt is not None:
                   # 统一转成 UTC 展示，避免时区歧义
                   if created_dt.tzinfo is not None:
                       created_dt = created_dt.astimezone(timezone.utc)
-                  created_display = created_dt.strftime('%Y-%m-%d %H:%M UTC')
-              except Exception as e:
-                  print("警告：解析 Issue created_at 失败，将不展示时间：{}".format(e))
-                  created_display = ''
+                  # 带上毫秒：%f 为微秒(6位)，截前 3 位作为毫秒
+                  created_display = created_dt.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] + ' UTC'
 
           # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
           md_lines = []
