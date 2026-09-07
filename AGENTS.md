@@ -175,64 +175,52 @@ async function getUserById(userId: string, includeProfile = false): Promise<User
 - 对新增源文件，除补全 `2.4.1` 文件级注释外，其中导出的公共函数/接口还应遵循 `2.4.2` 的 `@param/@returns/@throws` 约定。
 
 ### 2.5 许可证与文件头规范 (License & File Header)
-所有新生成的代码文件**必须**包含以下文件头。修改现有文件时也必须遵循下述保留/补齐规则。
+> 本项目为 AI 提示词专家 **prompt_generator**（302.AI 开源前端，TypeScript/React），**并非 MZAPI 等 Python 项目**，许可证为 **AGPL-3.0**。所有新生成的代码文件**必须**使用与本仓库 src/ 既有源码一致的 JSDoc 文件头；修改现有文件时遵循 2.5.3 保留规则。
 
 #### 2.5.1 许可证声明
-在文件的最顶部，添加标准的 Mozilla Public License v. 2.0 声明：
+仓库根目录使用 **GNU Affero General Public License v3.0（AGPL-3.0）**。无需在每份文件中手写整段许可证全文，但必须在文件头 JSDoc 中以 `@LICENSE AGPL-3.0 license` 标明许可证归属。
 
-```python
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at https://mozilla.org/MPL/2.0/
+#### 2.5.2 文件头模板（JSDoc 风格，与本仓库 src/ 下源码保持一致）
+每个源文件顶部必须放置以下文件级 JSDoc 注释块：
+
+```typescript
+/**
+ * @fileoverview <一句话说明该文件/模块的核心职责>
+ * @author 祁筱欣
+ * @date <YYYY-MM-DD>
+ * @since <YYYY-MM-DD>
+ * @contact qixiaoxin@stu.sqxy.edu.cn
+ * @LICENSE AGPL-3.0 license
+ * @remark 补充说明：可列点详述本文件实现的主要功能与技术要点。
+ */
 ```
 
-#### 2.5.2 文件头模板
-在许可证声明之后，必须添加一个包含版权、原始实现声明、修改说明和内部标识的文件头。请严格遵循以下格式：
+**字段填充规则**：
+- `@fileoverview`：简要说明文件职责，与 `2.4.1 文件级文档字符串` 一致。
+- `@author`：固定为 `祁筱欣`。
+- `@date` / `@since`：采用 `YYYY-MM-DD` 格式；新文件两者均取当前日期。
+- `@contact`：固定为 `qixiaoxin@stu.sqxy.edu.cn`。
+- `@LICENSE`：固定写 `AGPL-3.0 license`（本项目真实许可证，勿写成 MPL-2.0 或 MZAPI 相关内容）。
+- `@remark`（可选）：列出本模块实现的主要功能与技术栈要点。
 
-```python
-# Copyright (C) <年份>  <你的名字>
-#
-# ORIGINAL IMPLEMENTATION – DO NOT REMOVE OR ALTER THIS NOTICE
-# This file is part of <项目名> and is licensed under MPL 2.0
-# Any modifications to this file must remain under MPL 2.0
-# when redistributed.
-
-# 内部项目标识（请勿修改）
-<内部标识变量>
-```
-
-**模板填充规则**：
-- `<年份>`：使用当前年份（如 `2026`）。
-- `<你的名字>`：使用 `祁筱欣`。
-- `<项目名>`：使用 `MZAPI`。
-- `<内部标识变量>`：Python 变量赋值语句，格式为 `_<项目名>_ORIGIN = "<项目名>-<功能模块>-<年份>-<你的名字首字母小写>"`，其中：
-  - 项目名：`MZAPI`
-  - 功能模块：根据当前生成代码的功能，用简短英文单词或词组描述（如 `hwc-exception-handler`）
-  - 年份：当前年份
-  - 名字首字母小写：`qxx`
-
-**示例**（为 `hwc-exception-handler` 模块生成代码时）：
-```python
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at https://mozilla.org/MPL/2.0/
-
-# Copyright (C) 2026  祁筱欣
-#
-# ORIGINAL IMPLEMENTATION – DO NOT REMOVE OR ALTER THIS NOTICE
-# This file is part of MZAPI and is licensed under MPL 2.0
-# Any modifications to this file must remain under MPL 2.0
-# when redistributed.
-
-# 内部项目标识（请勿修改）
-_MZAPI_ORIGIN = "mzapi-hwc-exception-handler-2026-qxx"
+**参照示例**（源自本仓库 `src/main.tsx` 真实头部）：
+```typescript
+/**
+ * @fileoverview 应用入口文件，负责初始化 React 应用并配置全局提供者
+ * @author 祁筱欣
+ * @date 2026-02-11
+ * @since 2026-02-11
+ * @contact qixiaoxin@stu.sqxy.edu.cn
+ * @LICENSE AGPL-3.0 license
+ * @remark 本模块是 React 应用的入口点，负责创建根节点、配置 Redux 与路由等。
+ */
 ```
 
 #### 2.5.3 修改现有文件规则
 当修改现有文件时：
-- 必须保留文件顶部已有的 MPL 2.0 许可证声明和所有其他注释。
-- 必须保留文件中已有的 `_MZAPI_ORIGIN` 标识，**不得修改其值**。
-- 如果文件缺少上述文件头，请按照模板为其添加。
+- **保留**文件顶部已有的 JSDoc 文件头及其中所有注释字段。
+- 若文件头缺失 `@author`、`@date`、`@contact`、`@LICENSE` 等关键字段，按 `2.5.2` 模板补齐；**不得引入 MPL-2.0 或 MZAPI 相关内容**。
+- 严禁在本项目代码中写入 Python 风格变量（如 `_MZAPI_ORIGIN`）或与 `prompt_generator` 无关的项目归属标识。
 
 ## 3. 工作流与文件操作行为准则 (Workflow Guidelines)
 
