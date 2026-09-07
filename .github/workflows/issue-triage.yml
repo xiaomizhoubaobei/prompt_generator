@@ -150,7 +150,6 @@ jobs:
             | models | #5319e7 | 模型选择与适配（src/components/ModelSelector.tsx、commonModelList、RadioGroup） |
             | config | #e4e669 | 配置、密钥、环境变量（.env.*、src/lib/security.ts 加解密、SettingsDialog） |
             | i18n | #1d76db | 多语言（src/lib/Language.ts：中文/English/日本語，README 三语同步） |
-            | draw | #fef2c0 | AI 绘画 / 图片提示词（DRAW 框架、图片转提示词） |
             | agent | #d35400 | Agent 编排与集成：iFlow CLI、Claude/Codex/Qoder/Gemini、ECC bundle、.cnb.yml install_agents.sh |
             | ai-audit | #ededed | AI 审计：src/ 与 ai-audit/ 的审计源码、.github/workflows/ai-audit-scheduled.yml、ecc 配置 |
 
