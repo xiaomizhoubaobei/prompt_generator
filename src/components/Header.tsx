@@ -28,7 +28,7 @@ import { cn } from "../utils";
  * @returns 返回包含标题和可选品牌图标的 JSX 元素
  */
 export default function Header({ language }: { language: 'chinese' | 'english' | 'japanese' }) {
-  const showBrand = true;
+  const showBrand = false;
   return (
     <div className="relative flex justify-center items-center my-8 gap-1">
       {showBrand &&
