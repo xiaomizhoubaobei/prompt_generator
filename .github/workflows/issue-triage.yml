@@ -125,7 +125,7 @@ jobs:
 
             ## 标签清单（标签名与颜色均为固定值，勿自行改色）
 
-            ### A. 类型标签（按问题性质）
+            ### A. 类型标签（按问题性质与生命周期）
             | 标签 | 颜色 | 适用场景 |
             | --- | --- | --- |
             | bug | #d73a4a | 缺陷、报错、行为异常 |
@@ -134,24 +134,35 @@ jobs:
             | documentation | #0075ca | 文档、README、注释规范 |
             | security | #b60205 | 安全、凭据泄漏、密钥管理 |
             | question | #d876e3 | 提问、咨询、用法求助 |
+            | good first issue | #1f883d | 适合新手参与，降低贡献门槛 |
+            | help wanted | #6f42c1 | 期望社区/他人协助解决的问题 |
+            | duplicate | #cfd3d7 | 与既有 issue 重复 |
+            | invalid | #ffffff | 无效：信息不足、与仓库无关、非问题 |
+            | wontfix | #6e5494 | 确认不修复/不采纳（含设计取舍） |
 
             ### B. 功能标签（按项目模块，源自 src/ 结构）
             | 标签 | 颜色 | 对应模块/场景 |
             | --- | --- | --- |
-            | prompt | #008672 | 提示词模板与优化逻辑（src/lib/prompt.ts 等） |
-            | framework | #fbca04 | 提示词框架：CO-STAR、CRISPE、QStar(Q*)、变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW、O1-STYLE、OpenAI、claude |
-            | ui | #7057ff | 界面与交互（src/components） |
-            | models | #5319e7 | 模型选择与适配（src/components/ModelSelector.tsx、commonModelList） |
-            | config | #e4e669 | 配置、密钥、环境变量（.env.*、src/lib/security.ts） |
-            | i18n | #1d76db | 多语言（src/lib/Language.ts：中文/English/日本語） |
-            | draw | #fef2c0 | AI 绘画 / 图片提示词（DRAW 框架） |
-            | ai-audit | #ededed | 基于 .github/workflows/ai-audit-scheduled.yml 的 AI 审计相关 |
+            | prompt | #008672 | 提示词模板与优化逻辑（src/lib/prompt.ts、src/lib/AnalyzeImagesPrompt.ts 等） |
+            | framework | #fbca04 | 提示词框架：CO-STAR、CRISPE、QStar(Q*)、变分法、Meta Prompting、CoT 思维链、微软优化法、RISE、DRAW、O1-STYLE、OpenAI、claude、Custom |
+            | custom | #7e4aff | 自定义提示词优化指令（src/App.tsx 编辑提示词优化指令、{input} 占位符） |
+            | ui | #7057ff | 界面与交互（src/components、Header、输入/结果 CodeMirror） |
+            | models | #5319e7 | 模型选择与适配（src/components/ModelSelector.tsx、commonModelList、RadioGroup） |
+            | config | #e4e669 | 配置、密钥、环境变量（.env.*、src/lib/security.ts 加解密、SettingsDialog） |
+            | i18n | #1d76db | 多语言（src/lib/Language.ts：中文/English/日本語，README 三语同步） |
+            | draw | #fef2c0 | AI 绘画 / 图片提示词（DRAW 框架、图片转提示词） |
+            | agent | #d35400 | Agent 编排与集成：iFlow CLI、Claude/Codex/Qoder/Gemini、ECC bundle、.cnb.yml install_agents.sh |
+            | ai-audit | #ededed | AI 审计：src/ 与 ai-audit/ 的审计源码、.github/workflows/ai-audit-scheduled.yml、ecc 配置 |
 
             ### C. 平台/工程标签
             | 标签 | 颜色 | 适用场景 |
             | --- | --- | --- |
-            | docker | #0969da | Dockerfile、docker-compose、nginx、容器部署 |
-            | ci | #8250df | GitHub Actions、.cnb.yml、CI/CD 流程 |
+            | docker | #0969da | Dockerfile、docker-compose、nginx、容器构建与部署 |
+            | deploy | #0f7fb8 | 部署、发布、上线（CNB 构建产物、镜像分发、站点运维） |
+            | ci | #8250df | 流水线与 CI/CD（.github/workflows、.cnb.yml、手动分包 vite 构建） |
+            | license | #bfd4f2 | 许可证合规：LICENSE、文件头 @LICENSE、版权/作者归属标识 |
+            | supply-chain | #168700 | 供应链与依赖安全：SBOM、Scorecard、dependency-review、dependabot |
+            | code-scanning | #e99695 | 代码与配置扫描：CodeQL、njsscan、secret-scanning、inclusiveness-analyzer、check-signed-commits |
 
             ### D. 优先级标签（issue 需人工介入的紧急程度）
             | 标签 | 颜色 | 含义 |
@@ -193,6 +204,7 @@ jobs:
             - **必须**：优先从上方「标签清单」选标签；若需创建缺失标签，颜色严格沿用清单，勿自行发明颜色
             - **不要**添加评论或修改 issue 内容；**仅分类**当前的 issue
             - **分配所有适用的标签**（类型 + 功能 + 平台，必要时 + 优先级）
+            - **仅当** issue 确为重复、无效或不采纳时才使用 duplicate / invalid / wontfix，正常 issue 不得误打；good first issue / help wanted 仅在符合语义时使用
             - **不要**为清单外的自创主题临时造标签；确属清单未覆盖时，可创建新标签但请遵循仓库现有命名与配色习惯
             - 将所有 shell 变量引用为 "${VAR}"（带引号和花括号）
             - 创建标签时提供清单对应的颜色与简洁中文描述
