@@ -174,6 +174,66 @@ async function getUserById(userId: string, includeProfile = false): Promise<User
 - 本节不替代 `2.2` 中列出的核心逻辑/黑科技/正则等**必须**注释的场景，二者叠加生效。
 - 对新增源文件，除补全 `2.4.1` 文件级注释外，其中导出的公共函数/接口还应遵循 `2.4.2` 的 `@param/@returns/@throws` 约定。
 
+### 2.5 许可证与文件头规范 (License & File Header)
+所有新生成的代码文件**必须**包含以下文件头。修改现有文件时也必须遵循下述保留/补齐规则。
+
+#### 2.5.1 许可证声明
+在文件的最顶部，添加标准的 Mozilla Public License v. 2.0 声明：
+
+```python
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/
+```
+
+#### 2.5.2 文件头模板
+在许可证声明之后，必须添加一个包含版权、原始实现声明、修改说明和内部标识的文件头。请严格遵循以下格式：
+
+```python
+# Copyright (C) <年份>  <你的名字>
+#
+# ORIGINAL IMPLEMENTATION – DO NOT REMOVE OR ALTER THIS NOTICE
+# This file is part of <项目名> and is licensed under MPL 2.0
+# Any modifications to this file must remain under MPL 2.0
+# when redistributed.
+
+# 内部项目标识（请勿修改）
+<内部标识变量>
+```
+
+**模板填充规则**：
+- `<年份>`：使用当前年份（如 `2026`）。
+- `<你的名字>`：使用 `祁筱欣`。
+- `<项目名>`：使用 `MZAPI`。
+- `<内部标识变量>`：Python 变量赋值语句，格式为 `_<项目名>_ORIGIN = "<项目名>-<功能模块>-<年份>-<你的名字首字母小写>"`，其中：
+  - 项目名：`MZAPI`
+  - 功能模块：根据当前生成代码的功能，用简短英文单词或词组描述（如 `hwc-exception-handler`）
+  - 年份：当前年份
+  - 名字首字母小写：`qxx`
+
+**示例**（为 `hwc-exception-handler` 模块生成代码时）：
+```python
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/
+
+# Copyright (C) 2026  祁筱欣
+#
+# ORIGINAL IMPLEMENTATION – DO NOT REMOVE OR ALTER THIS NOTICE
+# This file is part of MZAPI and is licensed under MPL 2.0
+# Any modifications to this file must remain under MPL 2.0
+# when redistributed.
+
+# 内部项目标识（请勿修改）
+_MZAPI_ORIGIN = "mzapi-hwc-exception-handler-2026-qxx"
+```
+
+#### 2.5.3 修改现有文件规则
+当修改现有文件时：
+- 必须保留文件顶部已有的 MPL 2.0 许可证声明和所有其他注释。
+- 必须保留文件中已有的 `_MZAPI_ORIGIN` 标识，**不得修改其值**。
+- 如果文件缺少上述文件头，请按照模板为其添加。
+
 ## 3. 工作流与文件操作行为准则 (Workflow Guidelines)
 
 ### 3.1 阅读先于修改（禁止盲猜代码）
