@@ -175,7 +175,7 @@ async function getUserById(userId: string, includeProfile = false): Promise<User
 - 对新增源文件，除补全 `2.4.1` 文件级注释外，其中导出的公共函数/接口还应遵循 `2.4.2` 的 `@param/@returns/@throws` 约定。
 
 ### 2.5 许可证与文件头规范 (License & File Header)
-> 本项目为 AI 提示词专家 **prompt_generator**（302.AI 开源前端，TypeScript/React），**并非 MZAPI 等 Python 项目**，许可证为 **AGPL-3.0**。所有新生成的代码文件**必须**使用与本仓库 src/ 既有源码一致的 JSDoc 文件头；修改现有文件时遵循 2.5.3 保留规则。
+> 本项目为 AI 提示词专家 **prompt_generator**（302.AI 开源前端，TypeScript/React），**并非 MZAPI 等 Python 项目**，许可证为 **AGPL-3.0**。所有新生成的代码文件**必须**使用与本仓库 src/ 既有源码一致的 JSDoc 文件头；修改现有文件时遵循 2.5.4 保留规则。
 
 #### 2.5.1 许可证声明
 仓库根目录使用 **GNU Affero General Public License v3.0（AGPL-3.0）**。无需在每份文件中手写整段许可证全文，但必须在文件头 JSDoc 中以 `@LICENSE AGPL-3.0 license` 标明许可证归属。
@@ -216,11 +216,35 @@ async function getUserById(userId: string, includeProfile = false): Promise<User
  */
 ```
 
-#### 2.5.3 修改现有文件规则
+#### 2.5.3 内部项目标识（本项目专属拼接规则，沿用 MZAPI 格式，仅项目名不同）
+为保留代码文件的可溯源能力，每个源文件在 JSDoc 文件头 `@remark` 之外，还可选用一条**本项目专属的内部项目标识**。其**拼接规则与既有 MZAPI 规则完全一致，仅项目名不同**（本项目为 `prompt_generator`）。
+
+**拼接格式**（与 MZAPI 相同的通式，仅替换项目名）：
+```
+<内部标识变量> = "<项目名小写>-<功能模块>-<年份>-<作者姓名首字母小写>"
+```
+- `<内部标识变量>`：`_<项目名大写蛇形>_ORIGIN`，本项目即 `_PROMPT_GENERATOR_ORIGIN`。
+- `<项目名小写>`：本项目使用 `prompt_generator`（MZAPI 系通式中的项目名位，此处由 `mzapi` 换成 `prompt_generator`）。
+- `<功能模块>`：根据当前生成代码的功能，用简短英文单词或词组描述（如 `prompt-optimizer`、`ai-audit`）。
+- `<年份>`：当前年份（如 `2026`）。
+- `<作者姓名首字母小写>`：固定为 `qxx`（祁筱欣）。
+
+**示例**（为 `prompt-optimizer` 模块生成代码时）：
+```python
+# 内部项目标识（请勿修改）
+_PROMPT_GENERATOR_ORIGIN = "prompt_generator-prompt-optimizer-2026-qxx"
+```
+
+**规则说明**：
+- 本项目标识沿用了 MZAPI 的标识拼接语义，仅把其中的项目名 `mzapi` 换成 `prompt_generator`，以区分项目归属并保留溯源能力。
+- 该标识仅在需要源码溯源场景使用，属可选项；文件头仍以 2.5.2 的 JSDoc 注释块为准。
+
+#### 2.5.4 修改现有文件规则
+
 当修改现有文件时：
 - **保留**文件顶部已有的 JSDoc 文件头及其中所有注释字段。
 - 若文件头缺失 `@author`、`@date`、`@contact`、`@LICENSE` 等关键字段，按 `2.5.2` 模板补齐；**不得引入 MPL-2.0 或 MZAPI 相关内容**。
-- 严禁在本项目代码中写入 Python 风格变量（如 `_MZAPI_ORIGIN`）或与 `prompt_generator` 无关的项目归属标识。
+- 本项目仅允许使用 2.5.3 定义的专属内部项目标识 `_PROMPT_GENERATOR_ORIGIN`；**严禁**在本项目代码中写入 MZAPI 等其他无关项目的归属标识（如 `_MZAPI_ORIGIN`）或与其技术栈/许可证不符的项目归属声明。
 
 ## 3. 工作流与文件操作行为准则 (Workflow Guidelines)
 
