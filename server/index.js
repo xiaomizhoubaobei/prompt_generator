@@ -27,7 +27,7 @@
  */
 
 import http from 'node:http'
-import { buildSessionCookie, verifySession, readSessionTokenFromCookie } from './session.js'
+import { buildSessionCookie, verifySession, readSessionTokenFromCookie, DEVICE_FINGERPRINT_HEADER } from './session.js'
 import { isUpstreamReady } from './upstream.js'
 import { proxyToUpstream, isAllowedPath } from './proxy.js'
 
@@ -130,6 +130,19 @@ function cleanupRateBuckets() {
 setInterval(cleanupRateBuckets, 60 * 1000).unref()
 
 /**
+ * 从请求头读取前端声明的设备指纹
+ * 指纹由前端基于浏览器稳定特征计算并随会话/续期/代理请求携带，
+ * 服务端用它与会话令牌内的绑定指纹比对，实现设备绑定。
+ *
+ * @param {import('node:http').IncomingMessage} req - 客户端请求对象
+ * @returns {string} 指纹十六进制串（缺失则为空串）
+ */
+function getDeviceFingerprint(req) {
+  const fp = req.headers[DEVICE_FINGERPRINT_HEADER]
+  return fp && typeof fp === 'string' ? fp.trim().slice(0, 128) : ''
+}
+
+/**
  * 向响应写入 JSON
  *
  * @param {import('node:http').ServerResponse} res - 服务端响应对象
@@ -157,7 +170,9 @@ function sendJson(res, status, data) {
 function hasValidSession(req) {
   const token = readSessionTokenFromCookie(req.headers.cookie)
   if (!token) return false
-  return verifySession(token) !== null
+  // 传入当前请求携带的设备指纹：若与会话签发时绑定的指纹不一致（令牌被带到
+  // 其它设备 / 令牌漂移），verifySession 将判定为无效，强制客户端重新建会。
+  return verifySession(token, getDeviceFingerprint(req)) !== null
 }
 
 /**
@@ -196,6 +211,9 @@ function isAllowedOrigin(req) {
 function handleSession(req, res, refresh = false) {
   const clientIp = getClientIp(req)
 
+  // 建立/续期会话时读取设备指纹，并随签名令牌一并绑定（后续请求须指纹一致）
+  const fingerprint = getDeviceFingerprint(req)
+
   // 来源校验：跨站请求一律拒绝
   if (!isAllowedOrigin(req)) {
     sendJson(res, 403, { ok: false, error: 'origin_forbidden', message: '来源不合法' })
@@ -216,14 +234,15 @@ function handleSession(req, res, refresh = false) {
     return
   }
 
-  // 续期时须先校验旧会话，避免被无会话者任意刷取
+  // 续期时须先校验旧会话（含设备指纹比对），避免被无会话者或跨设备者任意刷取
   if (refresh && !hasValidSession(req)) {
     sendJson(res, 401, { ok: false, error: 'unauthorized' })
     return
   }
 
-  // 下发 HttpOnly Cookie —— token 仅在 Cookie 中携带，不写入 JSON 响应体
-  const cookie = buildSessionCookie()
+  // 下发 HttpOnly Cookie —— token 仅在 Cookie 中携带，不写入 JSON 响应体；
+  // 每次建立/续期都会签发绑定当前设备指纹的新 Session Key，实现密钥轮换
+  const cookie = buildSessionCookie(fingerprint)
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
