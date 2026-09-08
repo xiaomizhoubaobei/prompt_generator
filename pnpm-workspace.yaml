@@ -1,7 +1,7 @@
 # pnpm 11 配置文件
 # 依赖版本覆盖（原 yarn resolutions，用于安全修复固定版本）
 overrides:
-  nanoid: 3.3.17
+  nanoid: 3.3.18 # 修复 customAlphabet/customRandom size=0 无限循环拒绝服务漏洞（GHSA 对应 CVE），升级到 3.3.18
   js-yaml: 4.3.1
   esbuild: 0.28.1
   picomatch: 4.0.4
