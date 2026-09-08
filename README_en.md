@@ -61,6 +61,8 @@ This app uses a **front-end SPA + server-side BFF** architecture. The legacy mod
 - The front-end no longer calls the external AI gateway directly; all AI calls hit the same-origin `/api/proxy/*` and are forwarded by the server;
 - The front-end establishes a **short-lived session** via `/api/session` (HttpOnly Cookie + signed token). The token lives only in browser heap memory and is **never** written to `localStorage`;
 - No static key constant exists in the codebase, and `VITE_*` variables must never carry any secret.
+- The session token is **bound to the device fingerprint** (a fresh Session Key is rolled on each session creation; refresh/proxy requests must match the bound fingerprint). Tokens are HMAC-signed server-side, so the front end cannot forge or decrypt other sessions;
+- The only inline-injection surface on the front end (the error banner) has been converged to a **context-aware, output-encoded** allow-listed renderer, and **CSP** (no inline/external scripts, no object embedding) is enforced on both the static pages and the `/api` responses for layered XSS defense.
 
 ### Method 1: Local Development
 1. Clone the project `git clone https://github.com/302ai/302_prompt_generator`
