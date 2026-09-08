@@ -3,8 +3,9 @@
 # =============================================================================
 # 用途：当仓库有新 Issue 被创建(open)时，自动向钉钉群机器人发送一条通知消息，
 #       让维护者第一时间感知新问题 / 需求 / 建议，无需守着仓库刷新。
-#       通知采用钉钉 markdown 卡片结构化排版（标题/提交者/详情/直达链接分条渲染），
-#       比纯文本更利于阅读与定位，一键直达 Issue 页面。
+#       通知采用钉钉 actionCard 卡片消息呈现（标题/提交者/详情/时间分条渲染，
+#       并附「前往查看」按钮一键直达 Issue 页面），观感上是一整张结构化卡片，
+#       比纯 markdown 文本通知更利于阅读与定位。
 #
 # 触发设计：
 #   - issues.types: [opened]：仅监听「新建 Issue」事件，避免 reopened / closed 等
@@ -211,38 +212,37 @@ jobs:
                   # 带上毫秒：%f 为微秒(6位)，截前 3 位作为毫秒
                   created_display = created_dt.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] + ' UTC'
 
-          # 组装「新建 Issue」通知（markdown 结构化排版，分条目清晰展示，便于阅读）
-          md_lines = []
+          # 组装「新建 Issue」通知（actionCard 卡片消息：逐字段分行加粗排版，清晰可读）。
+          # 标题已放入 actionCard.title，因此卡片正文不再重复 markdown 标题，直接从
+          # 字段清单开始，每条以「**字段：**值」分行渲染，观感是一张结构化信息卡片。
+          card_lines = []
           if num and title:
-              # 一级标题突出 Issue 标题，正文用列表条目逐项展示
-              md_lines.append("### 新 Issue #{}：{}".format(num, title))
               if repo:
-                  # 顶部加仓库归属行：钉钉通知栏标题虽已含仓库，正文再标一次，
+                  # 顶部加仓库归属行：钉钉卡片标题虽已含仓库，正文再标一次，
                   # 便于截图/转发给他人时仍能一眼看出来源仓库（多仓库共用一个机器人时尤为重要）
-                  md_lines.append("- **仓库：** {}".format(repo))
+                  card_lines.append("**仓库：**{}".format(repo))
               if user:
                   # 提交者以普通文本 + 可点击主页链接呈现（钉钉机器人无法真正 @ 到人，
                   # 故不再使用无效的 @ 前缀；附主页链接便于维护者一键溯源是谁提的 Issue）
                   if user_url:
-                      md_lines.append("- **提交者：** [{}]({})".format(user, user_url))
+                      card_lines.append("**提交者：**[{}]({})".format(user, user_url))
                   else:
-                      md_lines.append("- **提交者：** {}".format(user))
+                      card_lines.append("**提交者：**{}".format(user))
               if labels:
                   # 以等宽反引号包裹每个标签名，直观展示 Issue 归属类别
-                  md_lines.append("- **标签：** {}".format(' '.join('`{}`'.format(lb) for lb in labels)))
+                  card_lines.append("**标签：**{}".format(' '.join('`{}`'.format(lb) for lb in labels)))
               if body:
-                  # 正文折叠为单行摘要，避免超长/换行破坏 markdown 排版
-                  md_lines.append("- **详情：** {}".format(body))
+                  # 正文折叠为单行摘要，避免超长/换行撑爆卡片排版
+                  card_lines.append("**详情：**{}".format(body))
               if created_display:
                   # 标注 Issue 打开时间，便于判断该问题的新旧与积压时长
-                  md_lines.append("- **时间：** {}".format(created_display))
-              if url:
-                  # 提供可点击链接，一键直达 Issue 页面
-                  md_lines.append("- **直达：** [前往查看 Issue #{}]({})".format(num, url))
+                  card_lines.append("**时间：**{}".format(created_display))
           else:
-              md_lines.append("> 手动触发生成的示例通知（无真实 Issue 载荷）")
-          md_text = "\n".join(md_lines)
-          md_title = "【{}】新 Issue #{}".format(repo, num) if (num and title) else "【{}】新 Issue 通知".format(repo)
+              card_lines.append("> 手动触发生成的示例通知（无真实 Issue 载荷）")
+          card_text = "\n".join(card_lines)
+          card_title = "【{}】新 Issue #{}".format(repo, num) if (num and title) else "【{}】新 Issue 通知".format(repo)
+          # Issue 直达链接（真实 Issue 必带；手动触发/缺失时为空，则不挂跳转按钮）
+          issue_url = (url or '').strip()
 
           # 钉钉加签：timestamp = 毫秒级时间戳；sign = urlencode(base64(hmac_sha256(timestamp\nsecret, secret)))
           timestamp = str(round(time.time() * 1000))
@@ -256,7 +256,15 @@ jobs:
           sep = '&' if '?' in webhook else '?'
           target = '{}{}timestamp={}&sign={}'.format(webhook, sep, timestamp, sign)
 
-          payload = json.dumps({"msgtype": "markdown", "markdown": {"title": md_title, "text": md_text}}).encode('utf-8')
+          # 以 actionCard 卡片消息发送：钉钉渲染成一整张带标题正文的卡片，并可挂
+          # 「前往查看 Issue」跳转按钮，点击即可直达 Issue 页面；相比纯 markdown 文本，
+          # 卡片观感更清晰、定位更直接。url 缺失（如手动触发）时不挂按钮，仅展示卡片。
+          card_payload = {"msgtype": "actionCard", "actionCard": {"title": card_title, "text": card_text}}
+          if issue_url:
+              btn_label = "前往查看 Issue #{}".format(num) if num else "前往查看"
+              card_payload["actionCard"]["singleTitle"] = btn_label
+              card_payload["actionCard"]["singleURL"] = issue_url
+          payload = json.dumps(card_payload).encode('utf-8')
           req = urllib.request.Request(target, data=payload,
                                        headers={'Content-Type': 'application/json'})
           try:
