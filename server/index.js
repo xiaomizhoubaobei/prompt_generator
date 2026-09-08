@@ -142,6 +142,21 @@ function getDeviceFingerprint(req) {
   return fp && typeof fp === 'string' ? fp.trim().slice(0, 128) : ''
 }
 
+// 所有 JSON / 代理响应统一附加的安全响应头（XSS 纵深防御，与服务端 BFF 职责联动）：
+// - nosniff：禁止浏览器对响应做 MIME 嗅探，杜绝把 JSON 当 HTML 解析执行；
+// - CSP：即使 BFF 侧发生反射/注入，也强制拒绝任何外部脚本与内联执行，
+//       与 nginx 侧对静态 HTML 施加的 CSP 形成双层收敛；
+// - Referrer-Policy / X-Frame-Options：防止会话元数据经 Referrer 外泄与点击劫持。
+const SECURITY_RESPONSE_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy':
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
+    "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+    "connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-src 'none'",
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'SAMEORIGIN',
+}
+
 /**
  * 向响应写入 JSON
  *
@@ -155,6 +170,7 @@ function sendJson(res, status, data) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    ...SECURITY_RESPONSE_HEADERS,
   })
   res.end(body)
 }
@@ -229,6 +245,7 @@ function handleSession(req, res, refresh = false) {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
       'Retry-After': String(retryAfter),
+      ...SECURITY_RESPONSE_HEADERS,
     })
     res.end(JSON.stringify({ ok: false, error: 'rate_limited', message: '请求过于频繁，请稍后再试' }))
     return
@@ -247,6 +264,7 @@ function handleSession(req, res, refresh = false) {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Set-Cookie': cookie,
+    ...SECURITY_RESPONSE_HEADERS,
   })
   // 会话时长固定为 30 分钟，仅向客户端返回元数据，不暴露令牌内容
   res.end(JSON.stringify({ ok: true, expiresIn: 30 * 60 }))
@@ -322,7 +340,7 @@ async function handleProxy(req, res) {
     })
     // 透传上游响应状态与可转发的响应头（SSE 流式 / JSON 均可）
     const forwardable = ['content-type', 'content-length', 'transfer-encoding', 'connection', 'cache-control', 'date']
-    const headers = {}
+    const headers = { ...SECURITY_RESPONSE_HEADERS }
     for (const name of forwardable) {
       const val = upstreamRes.headers[name]
       if (val !== undefined) headers[name] = val
