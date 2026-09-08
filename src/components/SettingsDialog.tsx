@@ -29,8 +29,10 @@
  */
 
 import { useState } from "react"
+import { toast } from "react-toastify"
 import { LANGUAGE_LIBRARY, commonModelList } from "../lib/Language"
 import { getApiKey, setApiKey } from "../lib/apiKeyStore"
+import { isValidApiUrl } from "../utils"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
@@ -61,8 +63,12 @@ function loadNonSensitivePrefs(): Pick<SettingsData, 'apiUrl' | 'modelName'> {
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
+      // 仅恢复合法 http/https scheme 的 apiUrl，过滤危险 scheme（js/incomplete-url-scheme-check）
+      const savedUrl = parsed.apiUrl && isValidApiUrl(parsed.apiUrl)
+        ? parsed.apiUrl
+        : fallback.apiUrl
       return {
-        apiUrl: parsed.apiUrl || fallback.apiUrl,
+        apiUrl: savedUrl,
         modelName: parsed.modelName || fallback.modelName
       }
     }
@@ -90,12 +96,20 @@ export function SettingsDialog() {
   }))
 
   const handleSave = () => {
+    // URL scheme 白名单校验：仅允许 http/https，拒绝 javascript:/vbscript:/file: 等危险 scheme
+    const trimmedUrl = settings.apiUrl.trim()
+    if (!isValidApiUrl(trimmedUrl)) {
+      toast.error(LANGUAGE_LIBRARY[global.language]["API URL 无效，请输入合法的 http:// 或 https:// 地址"] ||
+        "API URL 无效，请输入合法的 http:// 或 https:// 地址")
+      return
+    }
+
     // API Key 仅写入会话期内存，绝不持久化到 localStorage
     setApiKey(settings.apiKey)
 
     // 仅将非敏感配置持久化到 localStorage，避免任何敏感凭据落盘
     const prefsToSave = {
-      apiUrl: settings.apiUrl,
+      apiUrl: trimmedUrl,
       modelName: settings.modelName
     }
     localStorage.setItem('appSettings', JSON.stringify(prefsToSave))

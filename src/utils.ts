@@ -103,6 +103,23 @@ export async function fetchApi(
 }
 
 /**
+ * 校验 URL 是否为合法的 http/https 协议地址。
+ * 用于阻止 javascript:、vbscript:、file: 等危险 scheme 的注入。
+ *
+ * @param {string} url - 待校验的 URL 字符串
+ * @returns {boolean} 合法返回 true，非法返回 false
+ */
+export function isValidApiUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const parsed = new URL(url)
+    return ['http:', 'https:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
+/**
  * 获取 API 配置（API Key、API URL 和模型名称）
  * API Key 仅从会话期内存读取（不落 localStorage、不回退到构建环境变量）；
  * 非敏感配置（apiUrl / modelName）仍从 localStorage 恢复。
@@ -121,7 +138,8 @@ export async function getApiConfig() {
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
       // 仅恢复非敏感配置（apiUrl / modelName），敏感 API Key 只存在于内存
-      if (parsed.apiUrl) apiUrl = parsed.apiUrl
+      // 仅恢复合法 http/https scheme 的 apiUrl，拒绝危险 scheme（javascript:/vbscript: 等）
+      if (parsed.apiUrl && isValidApiUrl(parsed.apiUrl)) apiUrl = parsed.apiUrl
       if (parsed.modelName) modelName = parsed.modelName
     }
   } catch (e) {
