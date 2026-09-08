@@ -24,7 +24,7 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import ky from 'ky'
 import { responseHandler, Language } from "./lib/ResponseHandler";
-import { decrypt } from "./lib/security";
+import { getApiKey } from "./lib/apiKeyStore";
 
 /**
  * 智能合并 CSS 类名
@@ -109,7 +109,8 @@ export async function fetchApi(
  * @returns 包含 apiKey、apiUrl 和 modelName 的对象
  */
 export async function getApiConfig() {
-  let apiKey = import.meta.env.VITE_APP_API_KEY || ''
+  // API Key 从会话期内存读取（未填时回退到构建环境变量），不再从 localStorage 解密持久化密文
+  const apiKey = getApiKey()
   let apiUrl = import.meta.env.VITE_APP_API_URL || 'https://api.302.ai'
   let modelName = import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
 
@@ -117,7 +118,7 @@ export async function getApiConfig() {
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
-      if (parsed.apiKey) apiKey = await decrypt(parsed.apiKey)
+      // 仅恢复非敏感配置（apiUrl / modelName），敏感 API Key 只存在于内存
       if (parsed.apiUrl) apiUrl = parsed.apiUrl
       if (parsed.modelName) modelName = parsed.modelName
     }

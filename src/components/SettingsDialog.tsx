@@ -7,23 +7,29 @@
  * @LICENSE MPL-2.0 license
  * @remark
  * 该组件提供了一个设置对话框，用于配置：
- * - API Key
+ * - API Key（仅保存于会话期内存，不落 localStorage，避免明文/伪加密持久化泄露）
  * - API URL
  * - 模型名称
  *
  * 支持的功能：
- * - 保存配置到 localStorage
- * - 加载配置从 localStorage
+ * - 将 API Key 写入运行时内存（getApiKey/setApiKey）
+ * - 将非敏感配置（apiUrl / modelName）持久化到 localStorage
  * - 显示配置状态
+ *
+ * 安全说明：纯前端 SPA 无法在浏览器内提供真正安全的密钥加密，此前用硬编码密钥
+ * AES-GCM 加密后写入 localStorage 的写法（js/clear-text-storage-of-sensitive-data）
+ * 实质等同明文落盘。故此处 API Key 仅在本次会话内存中有效，刷新页面后需重新填写，
+ * 或回退到部署者注入的构建环境变量 VITE_APP_API_KEY。
+ *
  * 使用方式：
  * ```tsx
  * <SettingsDialog />
  * ```
  */
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { LANGUAGE_LIBRARY, commonModelList } from "../lib/Language"
-import { encrypt, decrypt } from "../lib/security"
+import { getApiKey, setApiKey } from "../lib/apiKeyStore"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
@@ -40,6 +46,32 @@ interface SettingsData {
 }
 
 /**
+ * 从 localStorage 读取非敏感配置（apiUrl / modelName）
+ * 注意：API Key 不再从 localStorage 解密，仅由内存或环境变量提供。
+ *
+ * @returns 包含 apiUrl 与 modelName 的非敏感配置对象
+ */
+function loadNonSensitivePrefs(): Pick<SettingsData, 'apiUrl' | 'modelName'> {
+  const fallback = {
+    apiUrl: import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
+    modelName: import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
+  }
+  try {
+    const savedSettings = localStorage.getItem('appSettings')
+    if (savedSettings) {
+      const parsed = JSON.parse(savedSettings)
+      return {
+        apiUrl: parsed.apiUrl || fallback.apiUrl,
+        modelName: parsed.modelName || fallback.modelName
+      }
+    }
+  } catch (e) {
+    console.error('Failed to parse settings:', e)
+  }
+  return fallback
+}
+
+/**
  * SettingsDialog 组件
  * 提供设置对话框，用于配置 API Key 和模型
  *
@@ -50,42 +82,22 @@ export function SettingsDialog() {
   const global = useAppSelector(selectGlobal)
 
   const [isOpen, setIsOpen] = useState(false)
-  const [settings, setSettings] = useState<SettingsData>({
-    apiKey: import.meta.env.VITE_APP_API_KEY || '',
-    apiUrl: import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
-    modelName: import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-  })
+  const [settings, setSettings] = useState<SettingsData>(() => ({
+    // API Key 初始值取自会话期内存（未填时回退到构建环境变量）
+    apiKey: getApiKey(),
+    ...loadNonSensitivePrefs()
+  }))
 
-  useEffect(() => {
-    // 从 localStorage 加载设置
-    const loadSettings = async () => {
-      const savedSettings = localStorage.getItem('appSettings')
-      if (savedSettings) {
-        try {
-          const parsed = JSON.parse(savedSettings)
-          const decryptedApiKey = await decrypt(parsed.apiKey)
-          setSettings({
-            apiKey: decryptedApiKey || import.meta.env.VITE_APP_API_KEY || '',
-            apiUrl: parsed.apiUrl || import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
-            modelName: parsed.modelName || import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-          })
-        } catch (e) {
-          console.error('Failed to parse settings:', e)
-        }
-      }
-    }
-    loadSettings()
-  }, [])
+  const handleSave = () => {
+    // API Key 仅写入会话期内存，绝不持久化到 localStorage
+    setApiKey(settings.apiKey)
 
-  const handleSave = async () => {
-    // 保存设置到 localStorage（加密 API Key）
-    const encryptedApiKey = await encrypt(settings.apiKey)
-    const settingsToSave = {
-      apiKey: encryptedApiKey,
+    // 仅将非敏感配置持久化到 localStorage，避免任何敏感凭据落盘
+    const prefsToSave = {
       apiUrl: settings.apiUrl,
       modelName: settings.modelName
     }
-    localStorage.setItem('appSettings', JSON.stringify(settingsToSave))
+    localStorage.setItem('appSettings', JSON.stringify(prefsToSave))
 
     // 更新全局状态
     dispatch(setGlobalState({ selectedModel: settings.modelName }))
@@ -93,22 +105,12 @@ export function SettingsDialog() {
     setIsOpen(false)
   }
 
-  const handleCancel = async () => {
-    // 恢复原始设置
-    const savedSettings = localStorage.getItem('appSettings')
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings)
-        const decryptedApiKey = await decrypt(parsed.apiKey)
-        setSettings({
-          apiKey: decryptedApiKey || import.meta.env.VITE_APP_API_KEY || '',
-          apiUrl: parsed.apiUrl || import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
-          modelName: parsed.modelName || import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-        })
-      } catch (e) {
-        console.error('Failed to parse settings:', e)
-      }
-    }
+  const handleCancel = () => {
+    // 取消时回退到当前生效配置（内存 API Key + 持久化非敏感项）
+    setSettings({
+      apiKey: getApiKey(),
+      ...loadNonSensitivePrefs()
+    })
     setIsOpen(false)
   }
 
@@ -139,6 +141,10 @@ export function SettingsDialog() {
               onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
             />
           </div>
+          <p className="col-start-2 col-span-3 -mt-2 text-xs text-muted-foreground">
+            {LANGUAGE_LIBRARY[global.language]["API Key 仅本次会话有效，刷新页面后需重新填写"] ||
+              "API Key 仅本次会话有效，刷新页面后需重新填写"}
+          </p>
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="apiUrl" className="text-right">

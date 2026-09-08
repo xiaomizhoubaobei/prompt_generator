@@ -206,7 +206,8 @@ export const LANGUAGE_LIBRARY = {
     "选择模型": "选择模型",
     "模型选择": "模型选择",
     "设置": "设置",
-    "配置 API Key 和模型": "配置您的 API Key 和选择使用的模型"
+    "配置 API Key 和模型": "配置您的 API Key 和选择使用的模型",
+    "API Key 仅本次会话有效，刷新页面后需重新填写": "API Key 仅本次会话有效，刷新页面后需重新填写"
   },
   "english": {
     '记住分享码': 'Remember the sharing code',
@@ -333,7 +334,8 @@ export const LANGUAGE_LIBRARY = {
     "选择模型": "Select Model",
     "模型选择": "Model Selection",
     "设置": "Settings",
-    "配置 API Key 和模型": "Configure your API Key and select the model to use"
+    "配置 API Key 和模型": "Configure your API Key and select the model to use",
+    "API Key 仅本次会话有效，刷新页面后需重新填写": "API Key is valid only for this session and must be re-entered after a page refresh"
   },
   "japanese": {
     '记住分享码': '共有コードを記憶',
@@ -459,6 +461,7 @@ export const LANGUAGE_LIBRARY = {
     "选择模型": "モデルを選択",
     "模型选择": "モデル選択",
     "设置": "設定",
-    "配置 API Key 和模型": "API Keyとモデルを設定"
+    "配置 API Key 和模型": "API Keyとモデルを設定",
+    "API Key 仅本次会话有效，刷新页面后需重新填写": "API Keyはこのセッションでのみ有効で、ページ更新後は再入力が必要です"
   }
 }
