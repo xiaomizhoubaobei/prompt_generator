@@ -132,3 +132,8 @@ docker run -d -p 3000:80 \
 | UPSTREAM_API_KEY | **実際の上流 API Key（サーバー側のみが保持）** | 空 |
 | SESSION_SECRET | セッション署名シークレット（`openssl rand -hex 32` 推奨） | 空 |
 | SERVER_PORT | BFF 内部リスンポート | 3001 |
+| RATE_LIMIT_SESSION_MAX | セッション作成レート制限（IP/分あたり） | 10 |
+| RATE_LIMIT_REFRESH_MAX | セッション更新レート制限（IP/分あたり） | 20 |
+| RATE_LIMIT_PROXY_MAX | プロキシ呼び出しレート制限（IP/分あたり） | 30 |
+| PROXY_MAX_CONCURRENT | 同時上流プロキシリクエスト数 | 5 |
+| PROXY_MAX_BODY_BYTES | プロキシリクエスト本文の最大サイズ（バイト） | 5242880 |

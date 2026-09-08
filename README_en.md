@@ -129,3 +129,8 @@ docker run -d -p 3000:80 \
 | UPSTREAM_API_KEY | **Real upstream API Key (held only by the server)** | empty |
 | SESSION_SECRET | Session signing secret (suggest `openssl rand -hex 32`) | empty |
 | SERVER_PORT | BFF internal listen port | 3001 |
+| RATE_LIMIT_SESSION_MAX | Session creation rate limit (per-IP per-minute) | 10 |
+| RATE_LIMIT_REFRESH_MAX | Session refresh rate limit (per-IP per-minute) | 20 |
+| RATE_LIMIT_PROXY_MAX | Proxy call rate limit (per-IP per-minute) | 30 |
+| PROXY_MAX_CONCURRENT | Max concurrent upstream proxy requests | 5 |
+| PROXY_MAX_BODY_BYTES | Max proxy request body size (bytes) | 5242880 |

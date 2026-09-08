@@ -129,3 +129,8 @@ docker run -d -p 3000:80 \
 | UPSTREAM_API_KEY | **真实上游 API Key（服务端唯一持有）** | 空 |
 | SESSION_SECRET | 短期会话签名密钥（建议 `openssl rand -hex 32`） | 空 |
 | SERVER_PORT | BFF 内部监听端口 | 3001 |
+| RATE_LIMIT_SESSION_MAX | 会话建立限流（单 IP 每分钟上限） | 10 |
+| RATE_LIMIT_REFRESH_MAX | 会话续期限流（单 IP 每分钟上限） | 20 |
+| RATE_LIMIT_PROXY_MAX | 代理调用限流（单 IP 每分钟上限） | 30 |
+| PROXY_MAX_CONCURRENT | 代理并发上限 | 5 |
+| PROXY_MAX_BODY_BYTES | 代理请求体大小上限（字节） | 5242880 |
