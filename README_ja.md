@@ -11,7 +11,7 @@
 
 これは[302.AI](https://302.ai/ja/)の[AIプロンプトエキスパート](https://302.ai/product/detail/24)のオープンソース版です。
 302.AIに直接ログインして、コーディング不要で設定不要のオンラインバージョンをご利用いただけます。
-また、このプロジェクトをご自身のニーズに合わせて修正し、302.AIのAPI KEYを設定して独自にデプロイすることも可能です。
+また、このプロジェクトをご自身のニーズに合わせて修正し、独自にデプロイすることも可能です。API Keyはアプリの設定画面で入力してください。
 
 
 ## インターフェースプレビュー
@@ -62,7 +62,7 @@ AIプロンプトエキスパートで、あなたのアイデアを完璧なAI�
 ### 方法1：ローカル開発
 1. プロジェクトのクローン `git clone https://github.com/302ai/302_prompt_generator`
 2. 依存関係のインストール `pnpm install`
-3. 302のAPI KEYの設定 .env.exampleを参照
+3. アプリ実行後、右上の設定画面で302.AIのAPI Keyを入力（このセッションのみ有効）
 4. プロジェクトの実行 `pnpm dev`
 5. http://localhost:5173 にアクセス
 
@@ -91,7 +91,7 @@ make help
 
 #### Docker Composeを使用
 1. 環境変数のコピー `cp .env.example .env`
-2. `.env` ファイルを変更し、API KEYを設定
+2. 必要に応じて `.env` ファイルを変更（API Keyは不要）
 3. サービスの起動 `docker-compose up -d`
 4. http://localhost:3000 にアクセス
 
@@ -107,7 +107,6 @@ docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
 ### 環境変数
 | 変数 | 説明 | デフォルト |
 |------|------|----------|
-| VITE_APP_API_KEY | 302 AI APIキー | - |
 | VITE_APP_SHOW_BRAND | 302 AIブランドを表示 | true |
 | VITE_APP_MODEL_NAME | AIモデル名 | gpt-4o |
 | VITE_APP_REGION | リージョン（0:中国, 1:世界） | 0 |

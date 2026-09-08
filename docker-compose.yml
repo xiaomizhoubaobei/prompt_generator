@@ -6,7 +6,6 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_APP_API_KEY: ${VITE_APP_API_KEY:-}
         VITE_APP_SHOW_BRAND: ${VITE_APP_SHOW_BRAND:-false}
         VITE_APP_MODEL_NAME: ${VITE_APP_MODEL_NAME:-gpt-4o}
         VITE_APP_REGION: ${VITE_APP_REGION:-0}
