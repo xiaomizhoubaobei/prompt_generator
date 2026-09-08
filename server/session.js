@@ -110,12 +110,14 @@ export function verifySession(token) {
  */
 export function buildSessionCookie() {
   const token = signSession()
-  const secure = process.env.NODE_ENV === 'production'
+  // Secure 为默认行为：会话 Cookie 仅在 HTTPS 链路上传输，杜绝经明文链路被截获。
+  // 仅当显式设置 ALLOW_INSECURE_COOKIES=1（本地 http 开发）时才省略 Secure，
+  // 避免因容器遗漏 NODE_ENV 而在生产环境错误签发非 Secure 会话 Cookie。
+  const secure = process.env.ALLOW_INSECURE_COOKIES !== '1'
   return [
     `prompt_session=${token}`,
     'Path=/',
     'HttpOnly',
-    // 生产环境强制 Secure，杜绝经明文链路被截获；本地 http 开发不做限制
     ...(secure ? ['Secure'] : []),
     'SameSite=Lax',
     `Max-Age=${Math.floor(ttlMs() / 1000)}`,

@@ -21,12 +21,23 @@
  * @returns {boolean} 合法返回 true
  */
 function isAllowedUpstreamUrl(raw) {
+  let u
   try {
-    const u = new URL(raw)
-    return ['http:', 'https:'].includes(u.protocol)
+    u = new URL(raw)
   } catch {
     return false
   }
+  // 生产上游一律要求 HTTPS，避免服务端持有的 API Key 经明文链路外发
+  if (u.protocol === 'https:') return true
+  // http 明文仅限「显式开启的开发模式」且目标是回环/本机地址：
+  // 须设置 ALLOW_HTTP_UPSTREAM=1 才放行 localhost/127.0.0.1/[::1]，
+  // 其余 http 目标 fail-closed，杜绝凭据明文传输。
+  if (u.protocol === 'http:') {
+    if (process.env.ALLOW_HTTP_UPSTREAM !== '1') return false
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  }
+  return false
 }
 
 /**

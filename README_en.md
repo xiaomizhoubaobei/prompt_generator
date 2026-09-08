@@ -106,6 +106,7 @@ docker build -t 302-prompt-generator:latest .
 
 # Run container (be sure to inject the server-side keys)
 docker run -d -p 3000:80 \
+  -e NODE_ENV=production \
   -e UPSTREAM_API_URL=https://api.302.ai \
   -e UPSTREAM_API_KEY=<your 302.AI API Key> \
   -e SESSION_SECRET=<random strong secret> \
@@ -125,7 +126,8 @@ docker run -d -p 3000:80 \
 #### Server-side BFF Variables (read by the backend only; never prefix with VITE_)
 | Variable | Description | Default |
 |----------|-------------|---------|
-| UPSTREAM_API_URL | Upstream AI gateway URL | https://api.302.ai |
+| NODE_ENV | Runtime mode (set `production` in the container; the session cookie carries Secure by default) | production |
+| UPSTREAM_API_URL | Upstream AI gateway URL (only https is allowed by default, to avoid leaking the API Key in plaintext) | https://api.302.ai |
 | UPSTREAM_API_KEY | **Real upstream API Key (held only by the server)** | empty |
 | SESSION_SECRET | Session signing secret (suggest `openssl rand -hex 32`) | empty |
 | SERVER_PORT | BFF internal listen port | 3001 |

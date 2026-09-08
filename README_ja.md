@@ -109,6 +109,7 @@ docker build -t 302-prompt-generator:latest .
 
 # コンテナを実行（サーバー側キーを必ず注入）
 docker run -d -p 3000:80 \
+  -e NODE_ENV=production \
   -e UPSTREAM_API_URL=https://api.302.ai \
   -e UPSTREAM_API_KEY=<あなたの 302.AI API Key> \
   -e SESSION_SECRET=<ランダムな強力なシークレット> \
@@ -128,7 +129,8 @@ docker run -d -p 3000:80 \
 #### サーバーサイド BFF 変数（バックエンドのみが読む。VITE_ 接頭辞禁止）
 | 変数 | 説明 | デフォルト |
 |------|------|-----------|
-| UPSTREAM_API_URL | 上流 AI ゲートウェイ URL | https://api.302.ai |
+| NODE_ENV | 実行モード（コンテナでは `production` を設定。セッション Cookie は既定で Secure） | production |
+| UPSTREAM_API_URL | 上流 AI ゲートウェイ URL（既定では https のみ許可し、API Key の平文漏洩を防止） | https://api.302.ai |
 | UPSTREAM_API_KEY | **実際の上流 API Key（サーバー側のみが保持）** | 空 |
 | SESSION_SECRET | セッション署名シークレット（`openssl rand -hex 32` 推奨） | 空 |
 | SERVER_PORT | BFF 内部リスンポート | 3001 |

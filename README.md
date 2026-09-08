@@ -106,6 +106,7 @@ docker build -t 302-prompt-generator:latest .
 
 # 运行容器（务必注入服务端密钥）
 docker run -d -p 3000:80 \
+  -e NODE_ENV=production \
   -e UPSTREAM_API_URL=https://api.302.ai \
   -e UPSTREAM_API_KEY=<你的 302.AI API Key> \
   -e SESSION_SECRET=<随机强口令> \
@@ -125,7 +126,8 @@ docker run -d -p 3000:80 \
 #### 服务端 BFF 变量（仅后端读取，严禁携带 VITE_ 前缀）
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| UPSTREAM_API_URL | 上游 AI 网关地址 | https://api.302.ai |
+| NODE_ENV | 运行模式（容器应置 `production`；会话 Cookie 默认即带 Secure） | production |
+| UPSTREAM_API_URL | 上游 AI 网关地址（默认仅允许 https，避免 API Key 明文外发） | https://api.302.ai |
 | UPSTREAM_API_KEY | **真实上游 API Key（服务端唯一持有）** | 空 |
 | SESSION_SECRET | 短期会话签名密钥（建议 `openssl rand -hex 32`） | 空 |
 | SERVER_PORT | BFF 内部监听端口 | 3001 |

@@ -21,8 +21,11 @@ services:
       - "${PORT:-3000}:80"
     environment:
       - TZ=Asia/Shanghai
+      # 生产运行模式：会话 Cookie 默认 Secure（仅 HTTPS 传输），必须显式注入，
+      # 不依赖缺失时隐式回退的旧逻辑，杜绝非 TLS 生产部署签发可明文截获的会话。
+      - NODE_ENV=production
       # ===== 服务端 BFF 配置（仅供后端进程读取，绝不注入前端）=====
-      # 上游 AI 网关地址
+      # 上游 AI 网关地址（默认 HTTPS；如需本地 http 联调请见 .env.example 的说明）
       - UPSTREAM_API_URL=${UPSTREAM_API_URL:-https://api.302.ai}
       # 真实上游 API Key：仅服务端持有，前端零密钥；请在 .env 或部署平台注入
       - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-}
@@ -30,6 +33,11 @@ services:
       - SESSION_SECRET=${SESSION_SECRET:-}
       # BFF 监听端口（容器内部）
       - SERVER_PORT=${SERVER_PORT:-3001}
+      # ---- 安全降级开关（生产环境请保持默认关闭/留空，勿开启）----
+      # 本地 http 开发联调时置 1：允许会话 Cookie 不携带 Secure（仅限本机 http）
+      - ALLOW_INSECURE_COOKIES=${ALLOW_INSECURE_COOKIES:-}
+      # 本地 http 联调时置 1：允许以 http 明文访问回环/本机地址的上游（生产严禁开启）
+      - ALLOW_HTTP_UPSTREAM=${ALLOW_HTTP_UPSTREAM:-}
       # ===== 滥用防护限流（可选调优，默认值见注释）=====
       - RATE_LIMIT_SESSION_MAX=${RATE_LIMIT_SESSION_MAX:-10}
       - RATE_LIMIT_REFRESH_MAX=${RATE_LIMIT_REFRESH_MAX:-20}

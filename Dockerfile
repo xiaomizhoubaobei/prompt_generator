@@ -46,6 +46,10 @@ FROM nginx:alpine AS production
 # 安装 Node.js 运行时（BFF 为纯 Node 内置模块实现，无需安装额外 npm 依赖）
 RUN apk add --no-cache nodejs
 
+# 生产环境模式：会话 Cookie 默认走 Secure（仅 HTTPS），并让 BFF 相关运行时
+# 逻辑按生产语义执行；NODE_ENV 必须显式注入，杜绝依赖缺失的隐式安全降级。
+ENV NODE_ENV=production
+
 # 删除默认 nginx 配置，替换为自定义配置（/api 反向代理到本机 BFF）
 RUN rm -rf /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
