@@ -8,7 +8,7 @@
 
 ![界面预览](docs/提示词专家.png)
 
-来自[302.AI](https://302.ai)的[AI 提示词专家](https://302.ai/product/detail/24)的开源版本。你可以直接登录302.AI，零代码零配置使用在线版本。或者对本项目根据自己的需求进行修改，传入302.AI的API KEY，自行部署。
+来自[302.AI](https://302.ai)的[AI 提示词专家](https://302.ai/product/detail/24)的开源版本。你可以直接登录302.AI，零代码零配置使用在线版本。或者对本项目根据自己的需求进行修改并自行部署，在应用设置中填写 API Key 后使用。
 
 ## 界面预览
 输入简单的描述，AI会生成高质量的提示语，有多种结构可供选择。支持在线修改和测试提示语。
@@ -56,7 +56,7 @@
 ### 方式一：本地开发
 1. 克隆项目 `git clone https://github.com/302ai/302_prompt_generator`
 2. 安装依赖 `pnpm install`
-3. 配置302的API KEY 参考.env.example
+3. 运行项目后在应用右上角设置中填写 302.AI 的 API Key（仅本次会话有效）
 4. 运行项目 `pnpm dev`
 5. 访问 http://localhost:5173
 
@@ -85,9 +85,9 @@ make help
 
 #### 使用 Docker Compose
 1. 复制环境变量配置 `cp .env.example .env`
-2. 修改 `.env` 文件，配置您的 API KEY
+2. 按需修改 `.env` 文件（无需填写 API Key，在应用内设置）
 3. 启动服务 `docker-compose up -d`
-4. 访问 http://localhost:3000
+4. 访问 http://localhost:3000，在右上角设置中填写 API Key（仅本次会话有效）
 
 #### 使用 Docker 命令
 ```bash
@@ -101,7 +101,6 @@ docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
 ### 环境变量说明
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| VITE_APP_API_KEY | 302 AI API 密钥 | - |
 | VITE_APP_MODEL_NAME | AI 模型名称 | gpt-4o |
 | VITE_APP_REGION | 区域（0:中国, 1:全球） | 0 |
 | VITE_APP_LOCALE | 语言（zh/en/ja） | zh |

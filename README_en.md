@@ -10,7 +10,7 @@
 
 The open-source version of [AI Prompt Expert](https://302.ai/product/detail/24) from [302.AI](https://302.ai/en/).
 You can directly log in to 302.AI to use the online version with zero code and zero configuration.
-Or modify this project according to your needs, input 302.AI's API KEY, and deploy it yourself.
+Or modify this project according to your needs and deploy it yourself; enter the API Key in the app's settings dialog.
 
 ## Interface Preview
 Enter a simple description, and the AI will generate high-quality prompts. There are multiple structures available for selection. It supports online modification and testing of prompts.
@@ -59,7 +59,7 @@ Through AI Prompt Expert! - Transform your ideas into perfect AI instructions! ð
 ### Method 1: Local Development
 1. Clone project `git clone https://github.com/302ai/302_prompt_generator`
 2. Install dependencies `pnpm install`
-3. Configure 302's API KEY (refer to .env.example)
+3. After running the project, enter the 302.AI API Key in the settings dialog (valid for current session only)
 4. Run project `pnpm dev`
 5. Visit http://localhost:5173
 
@@ -88,7 +88,7 @@ make help
 
 #### Using Docker Compose
 1. Copy environment variables `cp .env.example .env`
-2. Modify `.env` file, configure your API KEY
+2. Modify `.env` file as needed (no API Key needed here)
 3. Start service `docker-compose up -d`
 4. Visit http://localhost:3000
 
@@ -104,7 +104,6 @@ docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
 ### Environment Variables
 | Variable | Description | Default |
 |----------|-------------|---------|
-| VITE_APP_API_KEY | 302 AI API Key | - |
 | VITE_APP_SHOW_BRAND | Show 302 AI brand | true |
 | VITE_APP_MODEL_NAME | AI model name | gpt-4o |
 | VITE_APP_REGION | Region (0: China, 1: Global) | 0 |
