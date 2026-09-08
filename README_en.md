@@ -10,7 +10,7 @@
 
 The open-source version of [AI Prompt Expert](https://302.ai/product/detail/24) from [302.AI](https://302.ai/en/).
 You can directly log in to 302.AI to use the online version with zero code and zero configuration.
-Or modify this project according to your needs and deploy it yourself; enter the API Key in the app's settings dialog.
+Or modify this project according to your needs and deploy it yourself; configure the API Key via server-side environment variables (see "Development & Deployment"). No key entry is needed in the browser.
 
 ## Interface Preview
 Enter a simple description, and the AI will generate high-quality prompts. There are multiple structures available for selection. It supports online modification and testing of prompts.
@@ -53,15 +53,22 @@ Through AI Prompt Expert! - Transform your ideas into perfect AI instructions! ð
 - React
 - Tailwind CSS
 - Radix UI
-
 ## Development & Deployment
 
+### Security Architecture
+This app uses a **front-end SPA + server-side BFF** architecture. The legacy model of the front-end holding API Keys has been fully removed:
+- The real upstream AI gateway API Key is held and injected **server-side** via the `UPSTREAM_API_KEY` environment variable; the browser carries zero keys;
+- The front-end no longer calls the external AI gateway directly; all AI calls hit the same-origin `/api/proxy/*` and are forwarded by the server;
+- The front-end establishes a **short-lived session** via `/api/session` (HttpOnly Cookie + signed token). The token lives only in browser heap memory and is **never** written to `localStorage`;
+- No static key constant exists in the codebase, and `VITE_*` variables must never carry any secret.
+
 ### Method 1: Local Development
-1. Clone project `git clone https://github.com/302ai/302_prompt_generator`
+1. Clone the project `git clone https://github.com/302ai/302_prompt_generator`
 2. Install dependencies `pnpm install`
-3. After running the project, enter the 302.AI API Key in the settings dialog (valid for current session only)
-4. Run project `pnpm dev`
-5. Visit http://localhost:5173
+3. Configure the server environment (create `.env` from `.env.example` and fill in `UPSTREAM_API_KEY` / `SESSION_SECRET`, etc.)
+4. Start the backend BFF: `node server/index.js`
+5. Start the front-end: `pnpm dev`
+6. Visit http://localhost:5173 (a session is established automatically on the first AI call; no need to enter an API Key in the browser)
 
 ### Method 2: Docker Deployment
 
@@ -79,34 +86,46 @@ make logs
 # Stop container
 make stop
 
-# Clean up
+# Clean
 make clean
 
-# View all commands
+# List all commands
 make help
 ```
 
 #### Using Docker Compose
-1. Copy environment variables `cp .env.example .env`
-2. Modify `.env` file as needed (no API Key needed here)
-3. Start service `docker-compose up -d`
-4. Visit http://localhost:3000
+1. Copy the env config `cp .env.example .env`
+2. Fill in the **server-side keys** in `.env`: `UPSTREAM_API_KEY=<your 302.AI API Key>`, `SESSION_SECRET=<random strong secret>`
+3. Start the service `docker-compose up -d`
+4. Visit http://localhost:3000 (no API Key entry needed in the browser)
 
 #### Using Docker Commands
 ```bash
 # Build image
 docker build -t 302-prompt-generator:latest .
 
-# Run container
-docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
+# Run container (be sure to inject the server-side keys)
+docker run -d -p 3000:80 \
+  -e UPSTREAM_API_URL=https://api.302.ai \
+  -e UPSTREAM_API_KEY=<your 302.AI API Key> \
+  -e SESSION_SECRET=<random strong secret> \
+  --name 302-prompt-generator 302-prompt-generator:latest
 ```
 
 ### Environment Variables
+
+#### Front-end Build Variables (non-sensitive)
 | Variable | Description | Default |
 |----------|-------------|---------|
-| VITE_APP_SHOW_BRAND | Show 302 AI brand | true |
 | VITE_APP_MODEL_NAME | AI model name | gpt-4o |
 | VITE_APP_REGION | Region (0: China, 1: Global) | 0 |
-| VITE_APP_LOCALE | Language (zh/en/ja) | en |
-| VITE_APP_API_URL | API URL | https://api.302.ai |
-| PORT | Port number | 3000 |
+| VITE_APP_LOCALE | Language (zh/en/ja) | zh |
+| PORT | nginx public port | 3000 |
+
+#### Server-side BFF Variables (read by the backend only; never prefix with VITE_)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| UPSTREAM_API_URL | Upstream AI gateway URL | https://api.302.ai |
+| UPSTREAM_API_KEY | **Real upstream API Key (held only by the server)** | empty |
+| SESSION_SECRET | Session signing secret (suggest `openssl rand -hex 32`) | empty |
+| SERVER_PORT | BFF internal listen port | 3001 |

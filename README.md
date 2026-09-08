@@ -8,7 +8,7 @@
 
 ![界面预览](docs/提示词专家.png)
 
-来自[302.AI](https://302.ai)的[AI 提示词专家](https://302.ai/product/detail/24)的开源版本。你可以直接登录302.AI，零代码零配置使用在线版本。或者对本项目根据自己的需求进行修改并自行部署，在应用设置中填写 API Key 后使用。
+来自[302.AI](https://302.ai)的[AI 提示词专家](https://302.ai/product/detail/24)的开源版本。你可以直接登录302.AI，零代码零配置使用在线版本。或者对本项目根据自己的需求进行修改并自行部署，通过服务端环境变量配置 API Key（详见「开发&部署」），浏览器无需再填写任何密钥。
 
 ## 界面预览
 输入简单的描述，AI会生成高质量的提示语，有多种结构可供选择。支持在线修改和测试提示语。
@@ -53,12 +53,22 @@
 
 ## 开发&部署
 
+### 安全架构说明
+本应用为**前端 SPA + 服务端 BFF** 架构，已彻底移除「前端持有 API Key」的旧模型：
+- 真实上游 AI 网关的 API Key 由**服务端**环境变量 `UPSTREAM_API_KEY` 持有并注入，前端零密钥；
+- 前端不再直连外部 AI 网关，AI 调用统一请求同源 `/api/proxy/*`，由服务端代理转发；
+- 前端通过 `/api/session` 建立**短期会话**（HttpOnly Cookie + 签名 Token），会话仅存于浏览器堆内存，绝不写入 `localStorage`；
+- 代码中不存在任何静态密钥常量，VITE_* 变量不得承载任何密钥。
+
 ### 方式一：本地开发
 1. 克隆项目 `git clone https://github.com/302ai/302_prompt_generator`
 2. 安装依赖 `pnpm install`
-3. 运行项目后在应用右上角设置中填写 302.AI 的 API Key（仅本次会话有效）
-4. 运行项目 `pnpm dev`
-5. 访问 http://localhost:5173
+3. 配置服务端环境（新建 `.env`，按 `.env.example` 填写 `UPSTREAM_API_KEY` / `SESSION_SECRET` 等）
+4. 启动后端 BFF：`node server/index.js`
+5. 启动前端：`pnpm dev`
+6. 访问 http://localhost:5173（首次 AI 调用会自动建立会话，无需在浏览器填写 API Key）
+
+> 说明：若仅使用本地前端直连调试，可结合 vite 的 `/api` 代理指向已启动的 `server/index.js`。
 
 ### 方式二：Docker 部署
 
@@ -85,24 +95,37 @@ make help
 
 #### 使用 Docker Compose
 1. 复制环境变量配置 `cp .env.example .env`
-2. 按需修改 `.env` 文件（无需填写 API Key，在应用内设置）
+2. 在 `.env` 中填写**服务端密钥**：`UPSTREAM_API_KEY=<你的 302.AI API Key>`、`SESSION_SECRET=<随机强口令>`
 3. 启动服务 `docker-compose up -d`
-4. 访问 http://localhost:3000，在右上角设置中填写 API Key（仅本次会话有效）
+4. 访问 http://localhost:3000（无需在浏览器填写 API Key）
 
 #### 使用 Docker 命令
 ```bash
 # 构建镜像
 docker build -t 302-prompt-generator:latest .
 
-# 运行容器
-docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
+# 运行容器（务必注入服务端密钥）
+docker run -d -p 3000:80 \
+  -e UPSTREAM_API_URL=https://api.302.ai \
+  -e UPSTREAM_API_KEY=<你的 302.AI API Key> \
+  -e SESSION_SECRET=<随机强口令> \
+  --name 302-prompt-generator 302-prompt-generator:latest
 ```
 
 ### 环境变量说明
+
+#### 前端构建变量（非敏感）
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | VITE_APP_MODEL_NAME | AI 模型名称 | gpt-4o |
 | VITE_APP_REGION | 区域（0:中国, 1:全球） | 0 |
 | VITE_APP_LOCALE | 语言（zh/en/ja） | zh |
-| VITE_APP_API_URL | API 地址 | https://api.302.ai |
-| PORT | 端口号 | 3000 |
+| PORT | nginx 对外端口 | 3000 |
+
+#### 服务端 BFF 变量（仅后端读取，严禁携带 VITE_ 前缀）
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| UPSTREAM_API_URL | 上游 AI 网关地址 | https://api.302.ai |
+| UPSTREAM_API_KEY | **真实上游 API Key（服务端唯一持有）** | 空 |
+| SESSION_SECRET | 短期会话签名密钥（建议 `openssl rand -hex 32`） | 空 |
+| SERVER_PORT | BFF 内部监听端口 | 3001 |

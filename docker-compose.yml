@@ -21,6 +21,15 @@ services:
       - "${PORT:-3000}:80"
     environment:
       - TZ=Asia/Shanghai
+      # ===== 服务端 BFF 配置（仅供后端进程读取，绝不注入前端）=====
+      # 上游 AI 网关地址
+      - UPSTREAM_API_URL=${UPSTREAM_API_URL:-https://api.302.ai}
+      # 真实上游 API Key：仅服务端持有，前端零密钥；请在 .env 或部署平台注入
+      - UPSTREAM_API_KEY=${UPSTREAM_API_KEY:-}
+      # 短期会话签名密钥：部署时应设置为足够随机的强口令
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      # BFF 监听端口（容器内部）
+      - SERVER_PORT=${SERVER_PORT:-3001}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s

@@ -11,7 +11,7 @@
 
 これは[302.AI](https://302.ai/ja/)の[AIプロンプトエキスパート](https://302.ai/product/detail/24)のオープンソース版です。
 302.AIに直接ログインして、コーディング不要で設定不要のオンラインバージョンをご利用いただけます。
-また、このプロジェクトをご自身のニーズに合わせて修正し、独自にデプロイすることも可能です。API Keyはアプリの設定画面で入力してください。
+また、このプロジェクトをご自身のニーズに合わせて修正し、独自にデプロイすることも可能です。API Keyはサーバー側の環境変数で設定します（「開発とデプロイ」参照）。ブラウザでのキー入力は不要です。
 
 
 ## インターフェースプレビュー
@@ -56,60 +56,79 @@ AIプロンプトエキスパートで、あなたのアイデアを完璧なAI�
 - React
 - Tailwind CSS
 - Radix UI
-
 ## 開発とデプロイ
 
+### セキュリティアーキテクチャ
+本アプリは**フロントエンド SPA + サーバーサイド BFF** 構成です。「フロントエンドが API Key を保持する」従来モデルは完全に廃止しました。
+- 実際の上流 AI ゲートウェイの API Key は**サーバー側**の環境変数 `UPSTREAM_API_KEY` が保持・注入します。ブラウザには一切のキーが存在しません。
+- フロントエンドは外部 AI ゲートウェイへ直接アクセスせず、全ての AI 呼び出しを同一オリジンの `/api/proxy/*` に投げ、サーバーが代理転送します。
+- フロントエンドは `/api/session` で**短期セッション**を確立します（HttpOnly Cookie + 署名トークン）。トークンはブラウザのヒープメモリのみに保持され、`localStorage` には**一切書き込みません**。
+- コードベースに静的キー定数は存在せず、`VITE_*` 変数に機密を入れてはいけません。
+
 ### 方法1：ローカル開発
-1. プロジェクトのクローン `git clone https://github.com/302ai/302_prompt_generator`
-2. 依存関係のインストール `pnpm install`
-3. アプリ実行後、右上の設定画面で302.AIのAPI Keyを入力（このセッションのみ有効）
-4. プロジェクトの実行 `pnpm dev`
-5. http://localhost:5173 にアクセス
+1. プロジェクトをクローン `git clone https://github.com/302ai/302_prompt_generator`
+2. 依存をインストール `pnpm install`
+3. サーバー環境を設定（`.env.example` から `.env` を作成し、`UPSTREAM_API_KEY` / `SESSION_SECRET` 等を記入）
+4. バックエンド BFF を起動：`node server/index.js`
+5. フロントエンドを起動：`pnpm dev`
+6. http://localhost:5173 にアクセス（初回の AI 呼び出しで自動的にセッション確立。ブラウザでの API Key 入力は不要）
 
 ### 方法2：Dockerデプロイ
 
 #### Makefileを使用（推奨）
 ```bash
-# イメージのビルド
+# イメージをビルド
 make build
 
-# コンテナの起動
+# コンテナを起動
 make run
 
-# ログの表示
+# ログ確認
 make logs
 
-# コンテナの停止
+# コンテナ停止
 make stop
 
 # クリーンアップ
 make clean
 
-# すべてのコマンドを表示
+# コマンド一覧
 make help
 ```
 
 #### Docker Composeを使用
-1. 環境変数のコピー `cp .env.example .env`
-2. 必要に応じて `.env` ファイルを変更（API Keyは不要）
-3. サービスの起動 `docker-compose up -d`
-4. http://localhost:3000 にアクセス
+1. 環境設定をコピー `cp .env.example .env`
+2. `.env` に**サーバー側キー**を記入：`UPSTREAM_API_KEY=<あなたの 302.AI API Key>`、`SESSION_SECRET=<ランダムな強力なシークレット>`
+3. サービスを起動 `docker-compose up -d`
+4. http://localhost:3000 にアクセス（ブラウザでの API Key 入力は不要）
 
 #### Dockerコマンドを使用
 ```bash
-# イメージのビルド
+# イメージをビルド
 docker build -t 302-prompt-generator:latest .
 
-# コンテナの実行
-docker run -d -p 3000:80 --name 302-prompt-generator 302-prompt-generator:latest
+# コンテナを実行（サーバー側キーを必ず注入）
+docker run -d -p 3000:80 \
+  -e UPSTREAM_API_URL=https://api.302.ai \
+  -e UPSTREAM_API_KEY=<あなたの 302.AI API Key> \
+  -e SESSION_SECRET=<ランダムな強力なシークレット> \
+  --name 302-prompt-generator 302-prompt-generator:latest
 ```
 
 ### 環境変数
+
+#### フロントエンドビルド変数（非機密）
 | 変数 | 説明 | デフォルト |
-|------|------|----------|
-| VITE_APP_SHOW_BRAND | 302 AIブランドを表示 | true |
-| VITE_APP_MODEL_NAME | AIモデル名 | gpt-4o |
-| VITE_APP_REGION | リージョン（0:中国, 1:世界） | 0 |
-| VITE_APP_LOCALE | 言語（zh/en/ja） | ja |
-| VITE_APP_API_URL | API URL | https://api.302.ai |
-| PORT | ポート番号 | 3000 |
+|------|------|-----------|
+| VITE_APP_MODEL_NAME | AI モデル名 | gpt-4o |
+| VITE_APP_REGION | リージョン（0:中国, 1:グローバル） | 0 |
+| VITE_APP_LOCALE | 言語（zh/en/ja） | zh |
+| PORT | nginx 公開ポート | 3000 |
+
+#### サーバーサイド BFF 変数（バックエンドのみが読む。VITE_ 接頭辞禁止）
+| 変数 | 説明 | デフォルト |
+|------|------|-----------|
+| UPSTREAM_API_URL | 上流 AI ゲートウェイ URL | https://api.302.ai |
+| UPSTREAM_API_KEY | **実際の上流 API Key（サーバー側のみが保持）** | 空 |
+| SESSION_SECRET | セッション署名シークレット（`openssl rand -hex 32` 推奨） | 空 |
+| SERVER_PORT | BFF 内部リスンポート | 3001 |
