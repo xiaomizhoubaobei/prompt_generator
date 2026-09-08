@@ -8,7 +8,15 @@ export default defineConfig({
     global: "window",
   },
   server: {
-    host: '0.0.0.0'
+    host: '0.0.0.0',
+    proxy: {
+      // 开发环境下将 /api 转发到本地 BFF（server/index.js），前端始终同源请求、
+      // 不直连外部 AI 网关；真实 API Key 由服务端持有
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     rollupOptions: {

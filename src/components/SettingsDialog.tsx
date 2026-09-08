@@ -1,26 +1,18 @@
 /**
- * @fileoverview SettingsDialog 组件 - 设置对话框，用于配置 API Key 和模型
+ * @fileoverview SettingsDialog 组件 - 设置对话框（AI 模型选择）
  * @author 祁筱欣
  * @date 2026-02-11
  * @since 2026-02-11
  * @contact qixiaoxin@stu.sqxy.edu.cn
  * @LICENSE MPL-2.0 license
  * @remark
- * 该组件提供了一个设置对话框，用于配置：
- * - API Key（仅保存于会话期内存，不落 localStorage，避免明文/伪加密持久化泄露）
- * - API URL
- * - 模型名称
+ * 该组件提供设置对话框。安全架构升级后，API Key 与上游网关地址完全交由服务端
+ * （BFF）持有与管理，浏览器内不再存在任何密钥输入与存储，故本设置框仅保留
+ * 「AI 模型」等非敏感偏好，并仅持久化到 localStorage（不涉及任何凭据）。
  *
- * 支持的功能：
- * - 将 API Key 写入运行时内存（getApiKey/setApiKey）
- * - 将非敏感配置（apiUrl / modelName）持久化到 localStorage
- * - 显示配置状态
- *
- * 安全说明：纯前端 SPA 无法在浏览器内提供真正安全的密钥加密，此前用硬编码密钥
- * AES-GCM 加密后写入 localStorage 的写法（js/clear-text-storage-of-sensitive-data）
- * 实质等同明文落盘。且构建期注入的 VITE_APP_API_KEY 会随 bundle 分发、对每个下载
- * 应用的用户都可提取，也不提供保密性。故此处 API Key 仅在本次会话内存中有效，
- * 刷新页面后需重新填写。
+ * 历史说明：此前版本允许用户在前端输入 API Key（虽仅存会话内存，但本质仍是
+ * 浏览器持有密钥、前端直连外部 AI 网关）。现改为服务端代理托管密钥，彻底移除
+ * 前端 Key 录入，规避 CWE-312 / CWE-798 等敏感凭据暴露风险。
  *
  * 使用方式：
  * ```tsx
@@ -31,10 +23,7 @@
 import { useState } from "react"
 import { toast } from "react-toastify"
 import { LANGUAGE_LIBRARY, commonModelList } from "../lib/Language"
-import { getApiKey, setApiKey } from "../lib/apiKeyStore"
-import { isValidApiUrl } from "../utils"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
-import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Button } from "./ui/button"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
@@ -42,34 +31,19 @@ import { useAppDispatch, useAppSelector } from "../store/hooks"
 import { selectGlobal, setGlobalState } from "../store/globalSlice"
 import { IoSettingsOutline } from "react-icons/io5"
 
-interface SettingsData {
-  apiKey: string
-  apiUrl: string
-  modelName: string
-}
-
 /**
- * 从 localStorage 读取非敏感配置（apiUrl / modelName）
- * 注意：API Key 不再从 localStorage 读取，仅由会话内存提供。
+ * 读取本地持久化的非敏感配置（AI 模型名）
  *
- * @returns 包含 apiUrl 与 modelName 的非敏感配置对象
+ * @returns {string} 保存的模型名；无保存则返回默认模型
  */
-function loadNonSensitivePrefs(): Pick<SettingsData, 'apiUrl' | 'modelName'> {
-  const fallback = {
-    apiUrl: import.meta.env.VITE_APP_API_URL || 'https://api.302.ai',
-    modelName: import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-  }
+function loadSavedModel(): string {
+  const fallback = import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
   try {
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
-      // 仅恢复合法 http/https scheme 的 apiUrl，过滤危险 scheme（js/incomplete-url-scheme-check）
-      const savedUrl = parsed.apiUrl && isValidApiUrl(parsed.apiUrl)
-        ? parsed.apiUrl
-        : fallback.apiUrl
-      return {
-        apiUrl: savedUrl,
-        modelName: parsed.modelName || fallback.modelName
+      if (parsed && typeof parsed.modelName === 'string' && parsed.modelName) {
+        return parsed.modelName
       }
     }
   } catch (e) {
@@ -80,7 +54,7 @@ function loadNonSensitivePrefs(): Pick<SettingsData, 'apiUrl' | 'modelName'> {
 
 /**
  * SettingsDialog 组件
- * 提供设置对话框，用于配置 API Key 和模型
+ * 提供设置对话框，用于选择 AI 模型（不含任何密钥配置）
  *
  * @returns 返回一个设置对话框组件
  */
@@ -89,43 +63,21 @@ export function SettingsDialog() {
   const global = useAppSelector(selectGlobal)
 
   const [isOpen, setIsOpen] = useState(false)
-  const [settings, setSettings] = useState<SettingsData>(() => ({
-    // API Key 初始值取自会话期内存（仅本次会话有效，刷新后需重新填写）
-    apiKey: getApiKey(),
-    ...loadNonSensitivePrefs()
-  }))
+  const [modelName, setModelName] = useState<string>(() => loadSavedModel())
 
   const handleSave = () => {
-    // URL scheme 白名单校验：仅允许 http/https，拒绝 javascript:/vbscript:/file: 等危险 scheme
-    const trimmedUrl = settings.apiUrl.trim()
-    if (!isValidApiUrl(trimmedUrl)) {
-      toast.error(LANGUAGE_LIBRARY[global.language]["API URL 无效，请输入合法的 http:// 或 https:// 地址"] ||
-        "API URL 无效，请输入合法的 http:// 或 https:// 地址")
-      return
-    }
-
-    // API Key 仅写入会话期内存，绝不持久化到 localStorage
-    setApiKey(settings.apiKey)
-
-    // 仅将非敏感配置持久化到 localStorage，避免任何敏感凭据落盘
-    const prefsToSave = {
-      apiUrl: trimmedUrl,
-      modelName: settings.modelName
-    }
+    // 仅持久化非敏感配置（模型名），API Key 由服务端托管，前端零密钥
+    const prefsToSave = { modelName }
     localStorage.setItem('appSettings', JSON.stringify(prefsToSave))
 
     // 更新全局状态
-    dispatch(setGlobalState({ selectedModel: settings.modelName }))
-
+    dispatch(setGlobalState({ selectedModel: modelName }))
+    toast.success(LANGUAGE_LIBRARY[global.language]["设置已保存"] || "设置已保存")
     setIsOpen(false)
   }
 
   const handleCancel = () => {
-    // 取消时回退到当前生效配置（内存 API Key + 持久化非敏感项）
-    setSettings({
-      apiKey: getApiKey(),
-      ...loadNonSensitivePrefs()
-    })
+    setModelName(loadSavedModel())
     setIsOpen(false)
   }
 
@@ -138,50 +90,23 @@ export function SettingsDialog() {
         <DialogHeader>
           <DialogTitle>{LANGUAGE_LIBRARY[global.language]["设置"] || "设置"}</DialogTitle>
           <DialogDescription>
-            {LANGUAGE_LIBRARY[global.language]["配置 API Key 和模型"] || "配置您的 API Key 和选择使用的模型"}
+            {LANGUAGE_LIBRARY[global.language]["选择 AI 模型"]}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="apiKey" className="text-right">
-              API Key
-            </Label>
-            <Input
-              id="apiKey"
-              type="password"
-              placeholder="sk-..."
-              className="col-span-3"
-              value={settings.apiKey}
-              onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-            />
-          </div>
-          <p className="col-start-2 col-span-3 -mt-2 text-xs text-muted-foreground">
-            {LANGUAGE_LIBRARY[global.language]["API Key 仅本次会话有效，刷新页面后需重新填写"] ||
-              "API Key 仅本次会话有效，刷新页面后需重新填写"}
+          <p className="col-start-1 col-span-4 -mt-2 text-xs text-muted-foreground">
+            {LANGUAGE_LIBRARY[global.language]["API Key 已交由服务端安全托管"]}
           </p>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="apiUrl" className="text-right">
-              API URL
-            </Label>
-            <Input
-              id="apiUrl"
-              placeholder="https://api.302.ai"
-              className="col-span-3"
-              value={settings.apiUrl}
-              onChange={(e) => setSettings({ ...settings, apiUrl: e.target.value })}
-            />
-          </div>
 
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="model" className="text-right mt-2">
               {LANGUAGE_LIBRARY[global.language]["AI模型"] || "AI 模型"}
             </Label>
-            <div className="col-span-3 space-y-2 max-h-[200px] overflow-y-auto border rounded-md p-2">
+            <div className="col-span-3 space-y-2 max-h-[240px] overflow-y-auto border rounded-md p-2">
               <RadioGroup
-                value={settings.modelName}
-                onValueChange={(value) => setSettings({ ...settings, modelName: value })}
+                value={modelName}
+                onValueChange={(value) => setModelName(value)}
               >
                 {commonModelList.map((model, index) => (
                   <div key={model.id} className="flex items-center space-x-2 py-1">

@@ -24,7 +24,6 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import ky from 'ky'
 import { responseHandler, Language } from "./lib/ResponseHandler";
-import { getApiKey } from "./lib/apiKeyStore";
 
 /**
  * 智能合并 CSS 类名
@@ -120,33 +119,27 @@ export function isValidApiUrl(url: string): boolean {
 }
 
 /**
- * 获取 API 配置（API Key、API URL 和模型名称）
- * API Key 仅从会话期内存读取（不落 localStorage、不回退到构建环境变量）；
- * 非敏感配置（apiUrl / modelName）仍从 localStorage 恢复。
+ * 获取运行期 AI 模型名称（非敏感配置）
+ * 仅从本地持久化配置（localStorage）与构建期默认值读取，不涉及任何 API Key。
+ * API Key / 上游网关地址已由服务端 BFF 托管，前端不再需要、也不再读取它们。
  *
- * @returns 包含 apiKey、apiUrl 和 modelName 的对象
+ * @returns {string} 当前生效的模型名称
  */
-export async function getApiConfig() {
-  // API Key 从会话期内存读取，不再从 localStorage 解密持久化密文，
-  // 也不再回退到会随 bundle 分发的 VITE_* 环境变量
-  const apiKey = getApiKey()
-  let apiUrl = import.meta.env.VITE_APP_API_URL || 'https://api.302.ai'
+export function getRuntimeModel(): string {
   let modelName = import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'
-
   try {
     const savedSettings = localStorage.getItem('appSettings')
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
-      // 仅恢复非敏感配置（apiUrl / modelName），敏感 API Key 只存在于内存
-      // 仅恢复合法 http/https scheme 的 apiUrl，拒绝危险 scheme（javascript:/vbscript: 等）
-      if (parsed.apiUrl && isValidApiUrl(parsed.apiUrl)) apiUrl = parsed.apiUrl
-      if (parsed.modelName) modelName = parsed.modelName
+      // 仅恢复非敏感模型名，绝不涉及任何密钥配置
+      if (parsed && typeof parsed.modelName === 'string' && parsed.modelName) {
+        modelName = parsed.modelName
+      }
     }
   } catch (e) {
     console.error('Failed to parse settings:', e)
   }
-
-  return { apiKey, apiUrl, modelName }
+  return modelName
 }
 
 /**

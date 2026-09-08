@@ -208,7 +208,10 @@ export const LANGUAGE_LIBRARY = {
     "设置": "设置",
     "配置 API Key 和模型": "配置您的 API Key 和选择使用的模型",
     "API Key 仅本次会话有效，刷新页面后需重新填写": "API Key 仅本次会话有效，刷新页面后需重新填写",
-    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "API URL 无效，请输入合法的 http:// 或 https:// 地址"
+    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "API URL 无效，请输入合法的 http:// 或 https:// 地址",
+    "选择 AI 模型": "选择 AI 模型",
+    "设置已保存": "设置已保存",
+    "API Key 已交由服务端安全托管": "API Key 已交由服务端安全托管，无需在浏览器中配置"
   },
   "english": {
     '记住分享码': 'Remember the sharing code',
@@ -337,7 +340,10 @@ export const LANGUAGE_LIBRARY = {
     "设置": "Settings",
     "配置 API Key 和模型": "Configure your API Key and select the model to use",
     "API Key 仅本次会话有效，刷新页面后需重新填写": "API Key is valid only for this session and must be re-entered after a page refresh",
-    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "Invalid API URL. Please enter a valid http:// or https:// address"
+    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "Invalid API URL. Please enter a valid http:// or https:// address",
+    "选择 AI 模型": "Select AI model",
+    "设置已保存": "Settings saved",
+    "API Key 已交由服务端安全托管": "API Key is securely managed by the server; no need to configure it in the browser"
   },
   "japanese": {
     '记住分享码': '共有コードを記憶',
@@ -465,6 +471,9 @@ export const LANGUAGE_LIBRARY = {
     "设置": "設定",
     "配置 API Key 和模型": "API Keyとモデルを設定",
     "API Key 仅本次会话有效，刷新页面后需重新填写": "API Keyはこのセッションでのみ有効で、ページ更新後は再入力が必要です",
-    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "API URLが無効です。有効なhttp://またはhttps://アドレスを入力してください"
+    "API URL 无效，请输入合法的 http:// 或 https:// 地址": "API URLが無効です。有効なhttp://またはhttps://アドレスを入力してください",
+    "选择 AI 模型": "AIモデルを選択",
+    "设置已保存": "設定を保存しました",
+    "API Key 已交由服务端安全托管": "APIキーはサーバー側で安全に管理されており、ブラウザでの設定は不要です"
   }
 }

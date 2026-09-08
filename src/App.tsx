@@ -62,8 +62,8 @@ import { AnalyzeImagesPrompt } from "./lib/AnalyzeImagesPrompt";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { selectGlobal, setGlobalState } from "./store/globalSlice";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { fetchApi, errMessage, extractCodeBlocksContent, getApiConfig } from "./utils";
-import { userAgentGenerator } from "./lib/UserAgentGenerator";
+import { errMessage, extractCodeBlocksContent } from "./utils";
+import { proxyChat, proxyImageSubmit } from "./lib/apiClient";
 import { responseHandler } from "./lib/ResponseHandler";
 import { HEADER_TITLE, LANG, LANG_SHORT, LANGUAGE_LIBRARY, modelList } from "./lib/Language";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog";
@@ -193,14 +193,7 @@ function App(): React.JSX.Element {
       max_tokens: 4096,
     };
 
-    const apiConfig = await getApiConfig();
-
-    return fetchApi(
-      `${apiConfig.apiUrl}/v1/chat/completions`,
-      "post",
-      body,
-      { Authorization: `Bearer ${apiConfig.apiKey}`, }
-    ).then(async (response) => {
+    return proxyChat(body).then(async (response) => {
       // 流式处理
       if (response.ok && response.body) {
         const reader = response.body.getReader();
@@ -328,16 +321,7 @@ function App(): React.JSX.Element {
       max_tokens: 4096,
     };
 
-    const apiConfig = await getApiConfig();
-
-    return fetchApi(
-      `${apiConfig.apiUrl}/v1/chat/completions`,
-      "post",
-      body,
-      {
-        Authorization: `Bearer ${apiConfig.apiKey}`,
-      }
-    ).then(async (response) => {
+    return proxyChat(body).then(async (response) => {
       // 流式处理
       if (response.ok && response.body) {
         const reader = response.body.getReader();
@@ -470,8 +454,6 @@ function App(): React.JSX.Element {
     setErrComp("");
     if (structureType !== "DRAW") {
       setIsTesting(true);
-      const apiConfig = await getApiConfig();
-      let url = `${apiConfig.apiUrl}/v1/chat/completions`;
       let body = {
         model: global.selectedModel || import.meta.env.VITE_APP_MODEL_NAME,
         messages: [{ role: "user", content }],
@@ -479,8 +461,7 @@ function App(): React.JSX.Element {
         max_tokens: 4096,
       };
 
-      const header = { Authorization: `Bearer ${apiConfig.apiKey}`, };
-      return fetchApi(url, "post", body, header).then(async (response) => {
+      return proxyChat(body).then(async (response) => {
         if (response.ok && response.body) {
           const reader = response.body.getReader();
           readStream(reader, "");
@@ -561,12 +542,7 @@ function App(): React.JSX.Element {
       })
     } else {
       setIsTesting(true);
-      const apiConfig = await getApiConfig();
-      let url = `${apiConfig.apiUrl}/302/submit/flux-dev`;
-      const myHeaders = new Headers();
-      myHeaders.append("Authorization", `Bearer ${apiConfig.apiKey}`);
-      myHeaders.append("User-Agent", userAgentGenerator.getRandom());
-      myHeaders.append("Content-Type", "application/json");
+      // 图片生成请求改由服务端代理注入真实 Key，前端不携带任何凭据
       const raw = JSON.stringify({
         "prompt": content,
         "image_size": {
@@ -576,12 +552,7 @@ function App(): React.JSX.Element {
         "num_inference_steps": 28,
         "guidance_scale": 3.5
       });
-      const resp = await ky(url, {
-        method: "POST",
-        body: raw,
-        headers: myHeaders,
-        timeout: 90000,
-      });
+      const resp = await proxyImageSubmit(raw);
       const respTxt = await resp.text();
       const result = JSON.parse(respTxt);
       setIsTesting(false);
@@ -622,19 +593,8 @@ function App(): React.JSX.Element {
       const imgUrl = imageResult.data.url;
       if (imgUrl) {
         const model = global.selectedModel || import.meta.env.VITE_APP_MODEL_NAME;
-        const apiConfig = await getApiConfig();
-        ky(`${apiConfig.apiUrl}/v1/chat/completions`,
-          {
-            method: 'post',
-            body: JSON.stringify(AnalyzeImagesPrompt({ model, url: imgUrl })),
-            timeout: false,
-            headers: {
-              "Authorization": `Bearer ${apiConfig.apiKey}`,
-              "accept": "application/json",
-              "Content-Type": "application/json",
-            }
-          }
-        )
+        // 图片转文字分析同样改由服务端代理，前端不携带任何 API Key
+        proxyChat(AnalyzeImagesPrompt({ model, url: imgUrl }))
           .then(async (response) => {
             // 流式处理
             if (response.ok && response.body) {
