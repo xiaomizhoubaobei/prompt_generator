@@ -25,14 +25,35 @@
  * - 使用 Node 内置 crypto 的 HMAC-SHA256 对「payload + 过期时间」签名，避免引入第三方依赖；
  * - secret 取自服务端环境变量 SESSION_SECRET，绝不写入源码或随前端 bundle 分发；
  * - 校验采用 timingSafeEqual 抵御时序攻击。
+ *
+ * 由 JS 重构为 TypeScript：会话载荷定义为强类型接口 SessionPayload，全部入参 / 返回
+ * 值带显式类型；使用 erasable-only 语法，Node 原生 type-stripping 可直接运行 .ts。
  */
 
 import crypto from 'node:crypto'
 
 // 会话 Cookie 名（前后端、nginx 均依赖，统一由本模块导出避免漂移）
-export const SESSION_COOKIE_NAME = 'prompt_session'
+export const SESSION_COOKIE_NAME: string = 'prompt_session'
 // 设备指纹请求头名（前端每次会话/续期/代理请求均携带，服务端与 token 内 fp 比对）
-export const DEVICE_FINGERPRINT_HEADER = 'x-device-fingerprint'
+export const DEVICE_FINGERPRINT_HEADER: string = 'x-device-fingerprint'
+
+/**
+ * 会话令牌载荷结构
+ * - sid: 会话唯一标识
+ * - key: 本次会话专属、随机的 Session Key（每次建会动态轮换）
+ * - fp : 建会时采集的设备指纹哈希（SHA-256 hex），用于绑定发起设备
+ * - iat: 签发时间戳（毫秒）
+ */
+export interface SessionPayload {
+  /** 会话唯一标识 */
+  sid: string
+  /** 本次会话专属、随机的 Session Key */
+  key: string
+  /** 建会时绑定的设备指纹哈希（可为空串表示允许任意设备） */
+  fp: string
+  /** 签发时间戳（毫秒） */
+  iat: number
+}
 
 /**
  * 读取会话签名密钥（仅服务端可见）
@@ -41,15 +62,16 @@ export const DEVICE_FINGERPRINT_HEADER = 'x-device-fingerprint'
  *
  * @returns {string} 会话签名密钥
  */
-function getSecret() {
+function getSecret(): string {
   // 优先读取显式注入的服务端环境变量
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET
   // 无外部注入时使用进程内随机密钥（仅本次运行有效，杜绝硬编码默认值）
   // 由于该值不随 bundle/仓库分发，即使被读取也无法在其它运行期复用
-  if (!globalThis.__promptGenSessionSecret) {
-    globalThis.__promptGenSessionSecret = crypto.randomBytes(32).toString('hex')
+  const g = globalThis as { __promptGenSessionSecret?: string }
+  if (!g.__promptGenSessionSecret) {
+    g.__promptGenSessionSecret = crypto.randomBytes(32).toString('hex')
   }
-  return globalThis.__promptGenSessionSecret
+  return g.__promptGenSessionSecret
 }
 
 /**
@@ -57,27 +79,22 @@ function getSecret() {
  *
  * @returns {number} 有效期毫秒数
  */
-function ttlMs() {
-  const raw = Number(process.env.SESSION_TTL_MS)
+function ttlMs(): number {
+  const raw: number = Number(process.env.SESSION_TTL_MS)
   return Number.isFinite(raw) && raw > 0 ? raw : 30 * 60 * 1000
 }
 
 /**
  * 生成自包含短期会话令牌
  *
- * 载荷字段：
- * - sid: 会话唯一标识
- * - key: 本次会话专属、随机的 Session Key（每次建会动态轮换）
- * - fp : 建会时采集的设备指纹哈希（SHA-256 hex），用于绑定发起设备
- * - iat: 签发时间戳（毫秒）
- *
- * 载荷为服务端 HMAC 签名的 base64url，前端不可伪造、不可读取明文密钥材料。
+ * 载荷字段见 {@link SessionPayload}，载荷为服务端 HMAC 签名的 base64url，
+ * 前端不可伪造、不可读取明文密钥材料。
  *
  * @param {string} [fingerprint=''] - 发起会话的设备指纹哈希（可选，空则仅具备签名字段）
  * @returns {string} URL 安全的签名令牌
  */
-export function signSession(fingerprint = '') {
-  const payload = {
+export function signSession(fingerprint: string = ''): string {
+  const payload: SessionPayload = {
     sid: crypto.randomBytes(16).toString('hex'),
     // 每次建会生成新的随机 Session Key，实现动态轮换，防止长期复用
     key: crypto.randomBytes(24).toString('hex'),
@@ -85,8 +102,8 @@ export function signSession(fingerprint = '') {
     fp: String(fingerprint || ''),
     iat: Date.now(),
   }
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const sig = crypto
+  const body: string = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const sig: string = crypto
     .createHmac('sha256', getSecret())
     .update(body)
     .digest('base64url')
@@ -102,21 +119,21 @@ export function signSession(fingerprint = '') {
  *
  * @param {string} token - 前端携带的会话令牌
  * @param {string} [requestFp=''] - 当前请求携带的设备指纹；非空时与 token 内指纹强校验
- * @returns {object|null} 解析成功且未过期、指纹匹配返回载荷对象，否则返回 null
+ * @returns {SessionPayload|null} 解析成功且未过期、指纹匹配返回载荷对象，否则返回 null
  */
-export function verifySession(token, requestFp = '') {
+export function verifySession(token: string, requestFp: string = ''): SessionPayload | null {
   if (!token || typeof token !== 'string') return null
-  const idx = token.lastIndexOf('.')
+  const idx: number = token.lastIndexOf('.')
   if (idx <= 0) return null
-  const body = token.slice(0, idx)
-  const sig = token.slice(idx + 1)
+  const body: string = token.slice(0, idx)
+  const sig: string = token.slice(idx + 1)
 
   // 重新计算签名并做常量时间比较，抵御时序攻击
-  const expected = crypto
+  const expected: Buffer = crypto
     .createHmac('sha256', getSecret())
     .update(body)
     .digest()
-  let provided
+  let provided: Buffer
   try {
     provided = Buffer.from(sig, 'base64url')
   } catch {
@@ -126,7 +143,9 @@ export function verifySession(token, requestFp = '') {
   if (!crypto.timingSafeEqual(expected, provided)) return null
 
   try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+    const parsed: unknown = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const payload = parsed as SessionPayload
     if (typeof payload.iat !== 'number' || Date.now() - payload.iat > ttlMs()) return null
     // 设备绑定：请求带指纹且 token 也绑定了指纹时，二者必须一致，否则判定令牌漂移
     if (requestFp && payload.fp && requestFp !== payload.fp) return null
@@ -142,12 +161,12 @@ export function verifySession(token, requestFp = '') {
  * @param {string} fingerprint - 发起会话的设备指纹哈希，随 token 一并签名绑定
  * @returns {string} Set-Cookie 语句（不含前导 "Set-Cookie: "）
  */
-export function buildSessionCookie(fingerprint = '') {
-  const token = signSession(fingerprint)
+export function buildSessionCookie(fingerprint: string = ''): string {
+  const token: string = signSession(fingerprint)
   // Secure 为默认行为：会话 Cookie 仅在 HTTPS 链路上传输，杜绝经明文链路被截获。
   // 仅当显式设置 ALLOW_INSECURE_COOKIES=1（本地 http 开发）时才省略 Secure，
   // 避免因容器遗漏 NODE_ENV 而在生产环境错误签发非 Secure 会话 Cookie。
-  const secure = process.env.ALLOW_INSECURE_COOKIES !== '1'
+  const secure: boolean = process.env.ALLOW_INSECURE_COOKIES !== '1'
   return [
     `${SESSION_COOKIE_NAME}=${token}`,
     'Path=/',
@@ -164,11 +183,11 @@ export function buildSessionCookie(fingerprint = '') {
  * @param {string|undefined} cookieHeader - HTTP Cookie 请求头原文
  * @returns {string|null} 会话令牌或 null
  */
-export function readSessionTokenFromCookie(cookieHeader) {
+export function readSessionTokenFromCookie(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null
-  const prefix = `${SESSION_COOKIE_NAME}=`
+  const prefix: string = `${SESSION_COOKIE_NAME}=`
   for (const part of cookieHeader.split(';')) {
-    const trimmed = part.trim()
+    const trimmed: string = part.trim()
     if (trimmed.startsWith(prefix)) {
       return trimmed.slice(prefix.length)
     }

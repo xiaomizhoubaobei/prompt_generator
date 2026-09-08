@@ -24,21 +24,39 @@
  * - POST /api/session/refresh  : 续期会话（需旧会话有效 + 限流保护）
  * - POST /api/proxy/*          : 携带有效会话时透传到上游（注入真实 Key，流式）
  * - GET  /healthz              : 健康检查
+ *
+ * 由 JS 重构为 TypeScript：限流配置/会话校验/请求处理等关键数据结构均以接口与类型
+ * 标注，全程 erasable-only 语法，Node 原生 type-stripping 可直接运行 .ts 源文件。
  */
 
 import http from 'node:http'
-import { buildSessionCookie, verifySession, readSessionTokenFromCookie, DEVICE_FINGERPRINT_HEADER } from './session.js'
-import { isUpstreamReady } from './upstream.js'
-import { proxyToUpstream, isAllowedPath } from './proxy.js'
+import type { IncomingMessage, ServerResponse, Server } from 'node:http'
+import {
+  buildSessionCookie,
+  verifySession,
+  readSessionTokenFromCookie,
+  DEVICE_FINGERPRINT_HEADER,
+} from './session.ts'
+import { isUpstreamReady } from './upstream.ts'
+import { proxyToUpstream, isAllowedPath } from './proxy.ts'
 
-const PORT = Number(process.env.SERVER_PORT) || 3001
+const PORT: number = Number(process.env.SERVER_PORT) || 3001
+
+/**
+ * 单端点限流配置
+ * windowMs: 窗口时长（毫秒）；max: 窗口内最大请求次数
+ */
+interface RateLimitConfig {
+  windowMs: number
+  max: number
+}
 
 /**
  * 限流配置：针对不同端点的单 IP 窗口限流与全局并发上限
  * 均可由部署方通过环境变量调整；默认值面向单/少量访问者的自部署场景，
  * 在「保障可用」与「防止被外部刷量拖垮」之间取得平衡。
  */
-const RATE_LIMITS = {
+const RATE_LIMITS: Record<'session' | 'refresh' | 'proxy', RateLimitConfig> = {
   session: {
     windowMs: Number(process.env.RATE_LIMIT_SESSION_WINDOW_MS) || 60 * 1000,
     max: Number(process.env.RATE_LIMIT_SESSION_MAX) || 10,
@@ -53,28 +71,41 @@ const RATE_LIMITS = {
   },
 }
 // 代理并发上限（超出时立即拒绝而非排队，避免雪崩）
-const MAX_CONCURRENT_PROXY = Number(process.env.PROXY_MAX_CONCURRENT) || 5
+const MAX_CONCURRENT_PROXY: number = Number(process.env.PROXY_MAX_CONCURRENT) || 5
 // 代理请求体大小上限（默认 5MB），防止超大请求轰炸上游
-const MAX_PROXY_BODY_BYTES = Number(process.env.PROXY_MAX_BODY_BYTES) || 5 * 1024 * 1024
+const MAX_PROXY_BODY_BYTES: number = Number(process.env.PROXY_MAX_BODY_BYTES) || 5 * 1024 * 1024
 
-// 进程内限流桶：ip -> { session: number[], refresh: number[], proxy: number[] }
-// 以数组记录每个时间窗内的请求时间戳，滑动窗口淘汰旧记录
-const rateBuckets = new Map()
+/**
+ * 单 IP 限流类别（用于过程内记录时间戳的键）
+ */
+type RateLimitKind = 'session' | 'refresh' | 'proxy'
+
+/**
+ * 某 IP 在各限流类别下的滑动窗口时间戳记录
+ */
+interface RateBucket {
+  session: number[]
+  refresh: number[]
+  proxy: number[]
+}
+
+// 进程内限流桶：ip -> RateBucket（滑动窗口淘汰旧时间戳）
+const rateBuckets: Map<string, RateBucket> = new Map()
 // 当前进行中的代理出站请求数
-let activeProxyCount = 0
+let activeProxyCount: number = 0
 
 /**
  * 从请求中提取客户端 IP（兼容 nginx 反向代理透传头）
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
+ * @param {IncomingMessage} req - 客户端请求对象
  * @returns {string} 客户端 IP 字符串
  */
-function getClientIp(req) {
-  const xff = req.headers['x-forwarded-for']
+function getClientIp(req: IncomingMessage): string {
+  const xff: string | string[] | undefined = req.headers['x-forwarded-for']
   if (xff && typeof xff === 'string') {
     return xff.split(',')[0].trim()
   }
-  const realIp = req.headers['x-real-ip']
+  const realIp: string | string[] | undefined = req.headers['x-real-ip']
   if (realIp && typeof realIp === 'string') return realIp
   return req.socket.remoteAddress || 'unknown'
 }
@@ -83,18 +114,18 @@ function getClientIp(req) {
  * 滑动窗口限流检查（进程内，内存占用随活跃 IP 增长，长时间空闲自动回收由 GC 完成）
  *
  * @param {string} clientIp - 客户端 IP
- * @param {'session'|'refresh'|'proxy'} kind - 限流类别
+ * @param {RateLimitKind} kind - 限流类别
  * @returns {boolean} 放行返回 true，超限返回 false
  */
-function rateLimit(clientIp, kind) {
-  const cfg = RATE_LIMITS[kind]
-  const now = Date.now()
-  let entry = rateBuckets.get(clientIp)
+function rateLimit(clientIp: string, kind: RateLimitKind): boolean {
+  const cfg: RateLimitConfig = RATE_LIMITS[kind]
+  const now: number = Date.now()
+  let entry: RateBucket | undefined = rateBuckets.get(clientIp)
   if (!entry) {
     entry = { session: [], refresh: [], proxy: [] }
     rateBuckets.set(clientIp, entry)
   }
-  const timestamps = entry[kind]
+  const timestamps: number[] = entry[kind]
   // 淘汰窗口外的旧时间戳
   while (timestamps.length > 0 && timestamps[0] <= now - cfg.windowMs) {
     timestamps.shift()
@@ -109,16 +140,16 @@ function rateLimit(clientIp, kind) {
  *
  * @returns {void}
  */
-function cleanupRateBuckets() {
-  const cutoff = Date.now() - 10 * 60 * 1000 // 10 分钟无任何记录即清理
+function cleanupRateBuckets(): void {
+  const cutoff: number = Date.now() - 10 * 60 * 1000 // 10 分钟无任何记录即清理
   for (const [ip, entry] of rateBuckets) {
-    const recent =
+    const recent: number =
       entry.session.length + entry.refresh.length + entry.proxy.length
     if (recent === 0) {
       rateBuckets.delete(ip)
       continue
     }
-    const latest = Math.max(
+    const latest: number = Math.max(
       entry.session[entry.session.length - 1] || 0,
       entry.refresh[entry.refresh.length - 1] || 0,
       entry.proxy[entry.proxy.length - 1] || 0
@@ -134,11 +165,11 @@ setInterval(cleanupRateBuckets, 60 * 1000).unref()
  * 指纹由前端基于浏览器稳定特征计算并随会话/续期/代理请求携带，
  * 服务端用它与会话令牌内的绑定指纹比对，实现设备绑定。
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
+ * @param {IncomingMessage} req - 客户端请求对象
  * @returns {string} 指纹十六进制串（缺失则为空串）
  */
-function getDeviceFingerprint(req) {
-  const fp = req.headers[DEVICE_FINGERPRINT_HEADER]
+function getDeviceFingerprint(req: IncomingMessage): string {
+  const fp: string | string[] | undefined = req.headers[DEVICE_FINGERPRINT_HEADER]
   return fp && typeof fp === 'string' ? fp.trim().slice(0, 128) : ''
 }
 
@@ -147,7 +178,7 @@ function getDeviceFingerprint(req) {
 // - CSP：即使 BFF 侧发生反射/注入，也强制拒绝任何外部脚本与内联执行，
 //       与 nginx 侧对静态 HTML 施加的 CSP 形成双层收敛；
 // - Referrer-Policy / X-Frame-Options：防止会话元数据经 Referrer 外泄与点击劫持。
-const SECURITY_RESPONSE_HEADERS = {
+const SECURITY_RESPONSE_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'Content-Security-Policy':
     "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
@@ -160,13 +191,13 @@ const SECURITY_RESPONSE_HEADERS = {
 /**
  * 向响应写入 JSON
  *
- * @param {import('node:http').ServerResponse} res - 服务端响应对象
+ * @param {ServerResponse} res - 服务端响应对象
  * @param {number} status - HTTP 状态码
- * @param {Object} data - 待序列化数据
+ * @param {object} data - 待序列化数据
  * @returns {void}
  */
-function sendJson(res, status, data) {
-  const body = JSON.stringify(data)
+function sendJson(res: ServerResponse, status: number, data: object): void {
+  const body: string = JSON.stringify(data)
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -180,11 +211,11 @@ function sendJson(res, status, data) {
  * 只接受来自 HttpOnly Cookie 的会话令牌 —— 浏览器自动携带，脚本无法读取；
  * 拒绝 Authorization: Bearer 头，杜绝任何脚本/代理/日志层截获可回放的明文凭据。
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
+ * @param {IncomingMessage} req - 客户端请求对象
  * @returns {boolean} 会话有效返回 true
  */
-function hasValidSession(req) {
-  const token = readSessionTokenFromCookie(req.headers.cookie)
+function hasValidSession(req: IncomingMessage): boolean {
+  const token: string | null = readSessionTokenFromCookie(req.headers.cookie)
   if (!token) return false
   // 传入当前请求携带的设备指纹：若与会话签发时绑定的指纹不一致（令牌被带到
   // 其它设备 / 令牌漂移），verifySession 将判定为无效，强制客户端重新建会。
@@ -197,19 +228,23 @@ function hasValidSession(req) {
  * - localhost / 127.0.0.1 开发环境来源一律放行（vite proxy changeOrigin 会改 Host）；
  * - 其余来源必须与（x-forwarded-proto + Host）推导的同源 URL 一致才放行。
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
+ * @param {IncomingMessage} req - 客户端请求对象
  * @returns {boolean} 来源合法返回 true
  */
-function isAllowedOrigin(req) {
-  const origin = req.headers.origin
-  if (!origin) return true // 无 Origin 头（curl / 非浏览器）由限流兜底
+function isAllowedOrigin(req: IncomingMessage): boolean {
+  const origin: string | string[] | undefined = req.headers.origin
+  if (!origin || typeof origin !== 'string') return true // 无 Origin 头（curl / 非浏览器）由限流兜底
   try {
-    const originUrl = new URL(origin)
+    const originUrl: URL = new URL(origin)
     // 开发环境 localhost 任意端口放行（vite proxy 将 Host 改写为目标端口，无法逐端口匹配）
     if (['localhost', '127.0.0.1'].includes(originUrl.hostname)) return true
-    const host = req.headers.host || ''
-    const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http')
-    const expectedOrigin = `${proto}://${host}`
+    const host: string = req.headers.host || ''
+    const proto: string =
+      (Array.isArray(req.headers['x-forwarded-proto'])
+        ? req.headers['x-forwarded-proto'][0]
+        : req.headers['x-forwarded-proto']) ||
+      ((req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http')
+    const expectedOrigin: string = `${proto}://${host}`
     return origin === expectedOrigin
   } catch {
     return false
@@ -219,16 +254,16 @@ function isAllowedOrigin(req) {
 /**
  * 处理会话建立 / 续期
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
- * @param {import('node:http').ServerResponse} res - 服务端响应对象
+ * @param {IncomingMessage} req - 客户端请求对象
+ * @param {ServerResponse} res - 服务端响应对象
  * @param {boolean} refresh - 是否为续期请求
  * @returns {void}
  */
-function handleSession(req, res, refresh = false) {
-  const clientIp = getClientIp(req)
+function handleSession(req: IncomingMessage, res: ServerResponse, refresh: boolean = false): void {
+  const clientIp: string = getClientIp(req)
 
   // 建立/续期会话时读取设备指纹，并随签名令牌一并绑定（后续请求须指纹一致）
-  const fingerprint = getDeviceFingerprint(req)
+  const fingerprint: string = getDeviceFingerprint(req)
 
   // 来源校验：跨站请求一律拒绝
   if (!isAllowedOrigin(req)) {
@@ -237,10 +272,10 @@ function handleSession(req, res, refresh = false) {
   }
 
   // 按 IP 限流，防止匿名刷会拖垮会话签发能力
-  const kind = refresh ? 'refresh' : 'session'
+  const kind: RateLimitKind = refresh ? 'refresh' : 'session'
   if (!rateLimit(clientIp, kind)) {
-    const cfg = RATE_LIMITS[kind]
-    const retryAfter = Math.ceil(cfg.windowMs / 1000)
+    const cfg: RateLimitConfig = RATE_LIMITS[kind]
+    const retryAfter: number = Math.ceil(cfg.windowMs / 1000)
     res.writeHead(429, {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -259,7 +294,7 @@ function handleSession(req, res, refresh = false) {
 
   // 下发 HttpOnly Cookie —— token 仅在 Cookie 中携带，不写入 JSON 响应体；
   // 每次建立/续期都会签发绑定当前设备指纹的新 Session Key，实现密钥轮换
-  const cookie = buildSessionCookie(fingerprint)
+  const cookie: string = buildSessionCookie(fingerprint)
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -273,12 +308,12 @@ function handleSession(req, res, refresh = false) {
 /**
  * 处理上游代理请求
  *
- * @param {import('node:http').IncomingMessage} req - 客户端请求对象
- * @param {import('node:http').ServerResponse} res - 服务端响应对象
- * @returns {void}
+ * @param {IncomingMessage} req - 客户端请求对象
+ * @param {ServerResponse} res - 服务端响应对象
+ * @returns {Promise<void>} 完成处理后的 Promise
  */
-async function handleProxy(req, res) {
-  const clientIp = getClientIp(req)
+async function handleProxy(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const clientIp: string = getClientIp(req)
 
   // 1. 来源校验（CSRF 防护）
   if (!isAllowedOrigin(req)) {
@@ -293,7 +328,7 @@ async function handleProxy(req, res) {
   }
 
   // 3. 限制请求体大小（Content-Length 预检），防止超大请求
-  const contentLength = Number(req.headers['content-length'] || 0)
+  const contentLength: number = Number(req.headers['content-length'] || 0)
   if (Number.isFinite(contentLength) && contentLength > MAX_PROXY_BODY_BYTES) {
     sendJson(res, 413, { ok: false, error: 'payload_too_large', message: '请求体超出大小限制' })
     return
@@ -323,7 +358,7 @@ async function handleProxy(req, res) {
     return
   }
   // 去掉 /api/proxy 前缀得到上游路径
-  const upstreamPath = req.url.slice('/api/proxy'.length) || '/'
+  const upstreamPath: string = (req.url ? req.url.slice('/api/proxy'.length) : '/') || '/'
   if (!isAllowedPath(upstreamPath)) {
     sendJson(res, 403, { ok: false, error: 'path_forbidden' })
     return
@@ -333,17 +368,27 @@ async function handleProxy(req, res) {
   activeProxyCount += 1
   try {
     const upstreamRes = await proxyToUpstream({
-      method: req.method,
+      method: req.method ?? 'GET',
       upstreamPath,
       clientHeaders: req.headers,
       requestBody: req,
     })
     // 透传上游响应状态与可转发的响应头（SSE 流式 / JSON 均可）
-    const forwardable = ['content-type', 'content-length', 'transfer-encoding', 'connection', 'cache-control', 'date']
-    const headers = { ...SECURITY_RESPONSE_HEADERS }
+    const forwardable: readonly string[] = [
+      'content-type',
+      'content-length',
+      'transfer-encoding',
+      'connection',
+      'cache-control',
+      'date',
+    ]
+    const headers: Record<string, string | string[] | undefined> = { ...SECURITY_RESPONSE_HEADERS }
     for (const name of forwardable) {
-      const val = upstreamRes.headers[name]
-      if (val !== undefined) headers[name] = val
+      const val: string | string[] | undefined = upstreamRes.headers[name]
+      if (val !== undefined) {
+        // 写回响应头时统一转为字符串（string[] 取首个，规避重复头写入告警）
+        headers[name] = Array.isArray(val) ? val[0] : val
+      }
     }
     res.writeHead(upstreamRes.statusCode || 500, headers)
     upstreamRes.pipe(res)
@@ -360,9 +405,10 @@ async function handleProxy(req, res) {
   }
 }
 
-const server = http.createServer((req, res) => {
-  const { method, url } = req
-  const pathname = url.split('?')[0]
+const server: Server = http.createServer((req: IncomingMessage, res: ServerResponse): void => {
+  const method: string | undefined = req.method
+  const url: string = req.url || ''
+  const pathname: string = url.split('?')[0]
 
   // 健康检查（不参与限流，供负载均衡/探活使用）
   if (method === 'GET' && pathname === '/healthz') {
@@ -384,13 +430,13 @@ const server = http.createServer((req, res) => {
 
   // 上游代理
   if (method === 'POST' && pathname.startsWith('/api/proxy/')) {
-    handleProxy(req, res)
+    void handleProxy(req, res)
     return
   }
 
   sendJson(res, 404, { ok: false, error: 'not_found' })
 })
 
-server.listen(PORT, () => {
+server.listen(PORT, (): void => {
   console.log(`[server] BFF listening on :${PORT}`)
 })

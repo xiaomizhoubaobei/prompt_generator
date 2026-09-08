@@ -66,11 +66,12 @@
 1. 克隆项目 `git clone https://github.com/302ai/302_prompt_generator`
 2. 安装依赖 `pnpm install`
 3. 配置服务端环境（新建 `.env`，按 `.env.example` 填写 `UPSTREAM_API_KEY` / `SESSION_SECRET` 等）
-4. 启动后端 BFF：`node server/index.js`
+4. 启动后端 BFF：`node server/index.ts`
+   > 说明：server 为 TypeScript，使用 Node 原生 type-stripping 直跑，要求 Node >= 22.18 / >= 23.6。
 5. 启动前端：`pnpm dev`
 6. 访问 http://localhost:5173（首次 AI 调用会自动建立会话，无需在浏览器填写 API Key）
 
-> 说明：若仅使用本地前端直连调试，可结合 vite 的 `/api` 代理指向已启动的 `server/index.js`。
+> 说明：若仅使用本地前端直连调试，可结合 vite 的 `/api` 代理指向已启动的 `server/index.ts`。
 
 ### 方式二：Docker 部署
 

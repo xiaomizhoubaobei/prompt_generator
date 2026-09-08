@@ -7,7 +7,7 @@
  * @LICENSE MPL-2.0 license
  * @remark
  * 安全架构升级后，前端不再持有任何 API Key，也不再直连外部 AI 网关：
- * - 所有上游密钥由后端 BFF 持有并注入（见 server/upstream.js）；
+ * - 所有上游密钥由后端 BFF 持有并注入（见 server/upstream.ts）；
  * - 前端统一请求同源 /api/proxy/*，会话经 HttpOnly Cookie 自动携带；
  * - 本模块在首次调用时向后端建立短期会话，并在遇到 401（会话过期）时自动
  *   续期后重试一次，前端无需感知 Token 细节。
@@ -24,7 +24,7 @@ import ky from 'ky'
 let sessionEstablishedAt = 0
 let inflightSession: Promise<void> | null = null
 
-// 与服务端约定的设备指纹请求头（须与 server/session.js 中 DEVICE_FINGERPRINT_HEADER 一致）
+// 与服务端约定的设备指纹请求头（须与 server/session.ts 中 DEVICE_FINGERPRINT_HEADER 一致）
 const DEVICE_FINGERPRINT_HEADER = 'X-Device-Fingerprint'
 // 会话密钥轮换阈值：距上次建会超过该时长则强制重新建会（服务端重签新 Session Key）
 const SESSION_REFRESH_MS = 15 * 60 * 1000

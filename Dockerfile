@@ -44,6 +44,8 @@ RUN pnpm build
 FROM nginx:alpine AS production
 
 # 安装 Node.js 运行时（BFF 为纯 Node 内置模块实现，无需安装额外 npm 依赖）
+# 注意：server/*.ts 以 Node 原生 type-stripping 直接运行，要求 Node >= 22.18 / >= 23.6
+# （nginx:alpine 当前版本的 nodejs 包即满足此要求）
 RUN apk add --no-cache nodejs
 
 # 生产环境模式：会话 Cookie 默认走 Secure（仅 HTTPS），并让 BFF 相关运行时
@@ -57,7 +59,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # 复制前端构建产物
 COPY --from=base /app/dist /usr/share/nginx/html
 
-# 复制服务端 BFF 代码与启动脚本
+# 复制服务端 BFF 代码（TypeScript 源，运行期由 Node type-stripping 直跑）与启动脚本
 COPY server /app/server
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

@@ -68,7 +68,8 @@ This app uses a **front-end SPA + server-side BFF** architecture. The legacy mod
 1. Clone the project `git clone https://github.com/302ai/302_prompt_generator`
 2. Install dependencies `pnpm install`
 3. Configure the server environment (create `.env` from `.env.example` and fill in `UPSTREAM_API_KEY` / `SESSION_SECRET`, etc.)
-4. Start the backend BFF: `node server/index.js`
+4. Start the backend BFF: `node server/index.ts`
+   > Note: the server is TypeScript run via Node native type-stripping; requires Node >= 22.18 / >= 23.6.
 5. Start the front-end: `pnpm dev`
 6. Visit http://localhost:5173 (a session is established automatically on the first AI call; no need to enter an API Key in the browser)
 

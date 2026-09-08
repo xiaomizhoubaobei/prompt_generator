@@ -71,7 +71,8 @@ AIプロンプトエキスパートで、あなたのアイデアを完璧なAI�
 1. プロジェクトをクローン `git clone https://github.com/302ai/302_prompt_generator`
 2. 依存をインストール `pnpm install`
 3. サーバー環境を設定（`.env.example` から `.env` を作成し、`UPSTREAM_API_KEY` / `SESSION_SECRET` 等を記入）
-4. バックエンド BFF を起動：`node server/index.js`
+4. バックエンド BFF を起動：`node server/index.ts`
+   > 注：server は TypeScript を Node のネイティブ type-stripping で直接実行します。Node >= 22.18 / >= 23.6 が必要です。
 5. フロントエンドを起動：`pnpm dev`
 6. http://localhost:5173 にアクセス（初回の AI 呼び出しで自動的にセッション確立。ブラウザでの API Key 入力は不要）
 

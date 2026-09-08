@@ -6,9 +6,10 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && tsc -p tsconfig.server.json && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck:server": "tsc -p tsconfig.server.json"
   },
   "dependencies": {
     "@babel/runtime": "^7.26.0",
@@ -68,6 +69,7 @@
     "globals": "^17.9.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.18.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "@types/node": "^22.0.0"
   }
 }

@@ -12,6 +12,10 @@
  *   绝不通过 VITE_* 注入前端 bundle，也不落入任何源码常量；
  * - 服务端所有代理出站请求统一由此注入 Authorization 头，浏览器始终零 Key；
  * - 若部署方未配置密钥，服务端应明确报错提示，而不是放行无鉴权出站。
+ *
+ * 由 JS 重构为 TypeScript：所有入参 / 返回值补充显式类型，环境变量读取封装为
+ * 强类型辅助函数，消除隐式 any，全程保持 erasable-only 语法以支持 Node 原生
+ * type-stripping 直接运行 .ts 源文件（无需 tsc 编译产物）。
  */
 
 /**
@@ -20,8 +24,8 @@
  * @param {string} raw - 待校验的 base URL
  * @returns {boolean} 合法返回 true
  */
-function isAllowedUpstreamUrl(raw) {
-  let u
+function isAllowedUpstreamUrl(raw: string): boolean {
+  let u: URL
   try {
     u = new URL(raw)
   } catch {
@@ -46,10 +50,10 @@ function isAllowedUpstreamUrl(raw) {
  *
  * @returns {string} 上游 base URL（不含末尾斜杠）
  */
-export function getUpstreamBaseUrl() {
-  const raw = process.env.UPSTREAM_API_URL || 'https://api.302.ai'
+export function getUpstreamBaseUrl(): string {
+  const raw: string = process.env.UPSTREAM_API_URL || 'https://api.302.ai'
   // 过滤危险 scheme，确保出站目标永远合法
-  const base = isAllowedUpstreamUrl(raw) ? raw.replace(/\/+$/, '') : 'https://api.302.ai'
+  const base: string = isAllowedUpstreamUrl(raw) ? raw.replace(/\/+$/, '') : 'https://api.302.ai'
   return base
 }
 
@@ -58,7 +62,7 @@ export function getUpstreamBaseUrl() {
  *
  * @returns {string} 已配置的 API Key；未配置则返回空字符串
  */
-export function getUpstreamApiKey() {
+export function getUpstreamApiKey(): string {
   return (process.env.UPSTREAM_API_KEY || '').trim()
 }
 
@@ -67,6 +71,6 @@ export function getUpstreamApiKey() {
  *
  * @returns {boolean} 配置就绪返回 true
  */
-export function isUpstreamReady() {
+export function isUpstreamReady(): boolean {
   return getUpstreamApiKey().length > 0
 }
