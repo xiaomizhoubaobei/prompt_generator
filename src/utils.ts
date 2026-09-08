@@ -104,12 +104,14 @@ export async function fetchApi(
 
 /**
  * 获取 API 配置（API Key、API URL 和模型名称）
- * 优先使用用户设置，如果没有则使用环境变量
+ * API Key 仅从会话期内存读取（不落 localStorage、不回退到构建环境变量）；
+ * 非敏感配置（apiUrl / modelName）仍从 localStorage 恢复。
  *
  * @returns 包含 apiKey、apiUrl 和 modelName 的对象
  */
 export async function getApiConfig() {
-  // API Key 从会话期内存读取（未填时回退到构建环境变量），不再从 localStorage 解密持久化密文
+  // API Key 从会话期内存读取，不再从 localStorage 解密持久化密文，
+  // 也不再回退到会随 bundle 分发的 VITE_* 环境变量
   const apiKey = getApiKey()
   let apiUrl = import.meta.env.VITE_APP_API_URL || 'https://api.302.ai'
   let modelName = import.meta.env.VITE_APP_MODEL_NAME || 'gpt-4o-2024-08-06'

@@ -18,8 +18,9 @@
  *
  * 安全说明：纯前端 SPA 无法在浏览器内提供真正安全的密钥加密，此前用硬编码密钥
  * AES-GCM 加密后写入 localStorage 的写法（js/clear-text-storage-of-sensitive-data）
- * 实质等同明文落盘。故此处 API Key 仅在本次会话内存中有效，刷新页面后需重新填写，
- * 或回退到部署者注入的构建环境变量 VITE_APP_API_KEY。
+ * 实质等同明文落盘。且构建期注入的 VITE_APP_API_KEY 会随 bundle 分发、对每个下载
+ * 应用的用户都可提取，也不提供保密性。故此处 API Key 仅在本次会话内存中有效，
+ * 刷新页面后需重新填写。
  *
  * 使用方式：
  * ```tsx
@@ -47,7 +48,7 @@ interface SettingsData {
 
 /**
  * 从 localStorage 读取非敏感配置（apiUrl / modelName）
- * 注意：API Key 不再从 localStorage 解密，仅由内存或环境变量提供。
+ * 注意：API Key 不再从 localStorage 读取，仅由会话内存提供。
  *
  * @returns 包含 apiUrl 与 modelName 的非敏感配置对象
  */
@@ -83,7 +84,7 @@ export function SettingsDialog() {
 
   const [isOpen, setIsOpen] = useState(false)
   const [settings, setSettings] = useState<SettingsData>(() => ({
-    // API Key 初始值取自会话期内存（未填时回退到构建环境变量）
+    // API Key 初始值取自会话期内存（仅本次会话有效，刷新后需重新填写）
     apiKey: getApiKey(),
     ...loadNonSensitivePrefs()
   }))
