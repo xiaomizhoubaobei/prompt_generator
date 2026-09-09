@@ -78,11 +78,11 @@ jobs:
       #   锁定到复核过的发布 commit，杜绝「上游仓库改默认分支 -> 本工作流执行恶意
       #   代码」的供应链投毒路径。后续升级需走正式依赖评审，而非直接改浮动 tag。
       - name: Checkout 本项目（含 ai-audit 示例）
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # 拉取 seclab-taskflow-agent 框架，固定到已复核发布的不可变 commit SHA
       - name: Checkout seclab-taskflow-agent 框架（固定 commit）
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: GitHubSecurityLab/seclab-taskflow-agent
           # 固定到复核过的 v0.5.0 发布 commit，而非浮动默认分支
